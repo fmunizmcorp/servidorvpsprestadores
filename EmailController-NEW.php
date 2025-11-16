@@ -15,7 +15,15 @@ class EmailController extends Controller
      */
     public function index()
     {
-        $stats = $this->getEmailStats();
+        $rawStats = $this->getEmailStats();
+        
+        // Map to view-expected keys
+        $stats = [
+            'domains' => $rawStats['total_domains'] ?? 0,
+            'accounts' => $rawStats['total_accounts'] ?? 0,
+            'sentToday' => $rawStats['emails_sent_today'] ?? 0,
+            'receivedToday' => $rawStats['emails_received_today'] ?? 0
+        ];
         
         return view('email.index', [
             'stats' => $stats
@@ -152,8 +160,31 @@ class EmailController extends Controller
     {
         $queueData = $this->getQueueStatus();
         
+        // Parse queue for detailed statistics
+        $stats = [
+            'total' => $queueData['size'] ?? 0,
+            'active' => 0,
+            'deferred' => 0,
+            'hold' => 0
+        ];
+        
+        // Convert queue items to expected format
+        $queueItems = [];
+        foreach ($queueData['items'] ?? [] as $item) {
+            $queueItems[] = [
+                'queueId' => $item['id'] ?? '',
+                'size' => '1KB', // Simplified
+                'time' => date('Y-m-d H:i:s'),
+                'sender' => 'unknown',
+                'recipient' => 'unknown',
+                'status' => 'active'
+            ];
+            $stats['active']++;
+        }
+        
         return view('email.queue', [
-            'queue' => $queueData
+            'queue' => $queueItems,
+            'stats' => $stats
         ]);
     }
     
@@ -164,13 +195,15 @@ class EmailController extends Controller
     {
         $filter = $request->get('filter', '');
         $lines = $request->get('lines', 100);
+        $logType = $request->get('logType', 'mail');
         
         $logs = $this->getMailLogs($filter, $lines);
         
         return view('email.logs', [
             'logs' => $logs,
             'filter' => $filter,
-            'lines' => $lines
+            'lines' => $lines,
+            'logType' => $logType
         ]);
     }
     

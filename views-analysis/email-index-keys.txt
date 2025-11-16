@@ -1,0 +1,4 @@
+                <div class="bg-white p-6 rounded-lg shadow"><h3 class="text-gray-500">Domains</h3><p class="text-3xl font-bold">{{ $stats['domains'] }}</p></div>
+                <div class="bg-white p-6 rounded-lg shadow"><h3 class="text-gray-500">Accounts</h3><p class="text-3xl font-bold">{{ $stats['accounts'] }}</p></div>
+                <div class="bg-white p-6 rounded-lg shadow"><h3 class="text-gray-500">Sent Today</h3><p class="text-3xl font-bold text-green-600">{{ $stats['sentToday'] }}</p></div>
+                <div class="bg-white p-6 rounded-lg shadow"><h3 class="text-gray-500">Received Today</h3><p class="text-3xl font-bold text-blue-600">{{ $stats['receivedToday'] }}</p></div>

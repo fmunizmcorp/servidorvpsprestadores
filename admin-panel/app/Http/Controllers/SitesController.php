@@ -373,9 +373,9 @@ class SitesController extends Controller
             'domain' => $domain,
             'path' => $sitePath,
             'disk_usage' => $diskUsage,
-            'php_version' => $phpVersion,
-            'ssl_enabled' => $sslEnabled,
-            'is_active' => $isActive,
+            'phpVersion' => $phpVersion,  // Fixed: camelCase for view compatibility
+            'ssl' => $sslEnabled,  // Fixed: shorter key name for view
+            'nginxEnabled' => $isActive,  // Fixed: renamed for view compatibility
             'created_at' => filectime($sitePath)
         ];
     }

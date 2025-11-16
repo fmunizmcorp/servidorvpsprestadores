@@ -3,24 +3,40 @@
 namespace App\Http\Controllers;
 
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Validator;
+use App\Services\SystemCommandService;
 
 class BackupsController extends Controller
 {
-    private $backupPath = '/opt/webserver/backups';
-    private $scriptsPath = '/opt/webserver/scripts';
-    private $resticRepo = '/opt/webserver/backups/restic-repo';
+    private $systemCommand;
+    
+    public function __construct()
+    {
+        $this->systemCommand = new SystemCommandService();
+    }
     
     /**
      * Backups dashboard
      */
     public function index()
     {
-        $stats = $this->getBackupStats();
-        $recentBackups = $this->getRecentBackups(10);
+        $backups = $this->systemCommand->listBackups();
+        
+        // Calculate stats
+        $totalBackups = count($backups);
+        $totalSizeBytes = array_sum(array_column($backups, 'size_bytes'));
+        $lastBackup = $totalBackups > 0 ? $backups[0]['date'] : 'Never';
+        
+        $stats = [
+            'totalBackups' => $totalBackups,
+            'totalSize' => $this->formatBytes($totalSizeBytes),
+            'lastBackup' => $lastBackup,
+            'nextScheduled' => 'Daily at 02:00'
+        ];
         
         return view('backups.index', [
             'stats' => $stats,
-            'recentBackups' => $recentBackups
+            'recentBackups' => array_slice($backups, 0, 10)
         ]);
     }
     
@@ -29,8 +45,15 @@ class BackupsController extends Controller
      */
     public function list(Request $request)
     {
-        $type = $request->get('type', 'all'); // all, sites, email
-        $backups = $this->getAllBackups($type);
+        $type = $request->get('type', 'all');
+        $backups = $this->systemCommand->listBackups();
+        
+        // Filter by type if needed
+        if ($type !== 'all') {
+            $backups = array_filter($backups, function($backup) use ($type) {
+                return stripos($backup['type'], $type) !== false;
+            });
+        }
         
         return view('backups.list', [
             'backups' => $backups,
@@ -39,393 +62,224 @@ class BackupsController extends Controller
     }
     
     /**
-     * Trigger manual backup
+     * Show create backup form
      */
-    public function trigger(Request $request)
+    public function create()
     {
-        $type = $request->get('type', 'full'); // full, sites, email
+        // Get available sites for backup
+        $sitesPath = '/opt/webserver/sites';
+        $sites = [];
+        
+        if (is_dir($sitesPath)) {
+            $dirs = scandir($sitesPath);
+            foreach ($dirs as $dir) {
+                if ($dir !== '.' && $dir !== '..' && is_dir($sitesPath . '/' . $dir)) {
+                    $sites[] = $dir;
+                }
+            }
+        }
+        
+        // Get available databases
+        $databases = $this->getAvailableDatabases();
+        
+        return view('backups.create', [
+            'sites' => $sites,
+            'databases' => $databases
+        ]);
+    }
+    
+    /**
+     * Store - Create new backup
+     */
+    public function store(Request $request)
+    {
+        $validator = Validator::make($request->all(), [
+            'type' => 'required|in:site,database,email,full',
+            'target' => 'required_unless:type,full'
+        ]);
+        
+        if ($validator->fails()) {
+            return redirect()->back()
+                ->withErrors($validator)
+                ->withInput();
+        }
         
         try {
-            $output = '';
+            $type = $request->input('type');
+            $target = $request->input('target', 'full');
             
-            switch ($type) {
-                case 'sites':
-                    $output = $this->runBackupScript('backup.sh');
-                    break;
-                    
-                case 'email':
-                    $output = $this->runBackupScript('backup-mail.sh');
-                    break;
-                    
-                case 'full':
-                default:
-                    $output = $this->runBackupScript('backup.sh');
-                    $output .= "\n\n";
-                    $output .= $this->runBackupScript('backup-mail.sh');
-                    break;
+            $result = $this->systemCommand->createBackup($type, $target);
+            
+            if ($result['success']) {
+                return redirect()->route('backups.index')
+                    ->with('success', 'Backup created successfully!')
+                    ->with('output', $result['output']);
+            } else {
+                return redirect()->back()
+                    ->with('error', 'Backup failed: ' . $result['output'])
+                    ->withInput();
             }
-            
-            return redirect()->route('backups.index')
-                ->with('success', "Backup triggered successfully!")
-                ->with('output', $output);
-                
         } catch (\Exception $e) {
             return redirect()->back()
-                ->with('error', 'Failed to trigger backup: ' . $e->getMessage());
+                ->with('error', 'Error creating backup: ' . $e->getMessage())
+                ->withInput();
         }
     }
     
     /**
-     * Restore wizard
+     * Show restore form
      */
-    public function restore(Request $request)
+    public function restore($backupName)
     {
-        $snapshotId = $request->get('snapshot');
-        $backups = $this->getAllBackups('all');
+        $backups = $this->systemCommand->listBackups();
         
-        $snapshotDetails = null;
-        if ($snapshotId) {
-            $snapshotDetails = $this->getSnapshotDetails($snapshotId);
+        $backup = null;
+        foreach ($backups as $b) {
+            if ($b['name'] === $backupName) {
+                $backup = $b;
+                break;
+            }
+        }
+        
+        if (!$backup) {
+            abort(404, 'Backup not found');
         }
         
         return view('backups.restore', [
-            'backups' => $backups,
-            'snapshotId' => $snapshotId,
-            'snapshotDetails' => $snapshotDetails
+            'backup' => $backup
         ]);
     }
     
     /**
-     * Execute restore
+     * Process restore
      */
-    public function executeRestore(Request $request)
+    public function processRestore(Request $request)
     {
-        $snapshotId = $request->snapshot_id;
-        $restoreType = $request->restore_type; // full, selective
-        $targetPath = $request->target_path;
-        
-        if (empty($snapshotId) || empty($restoreType)) {
-            return redirect()->back()
-                ->with('error', 'Invalid restore parameters');
-        }
-        
-        try {
-            $script = "{$this->scriptsPath}/restore.sh";
-            
-            if (!file_exists($script)) {
-                throw new \Exception("Restore script not found");
-            }
-            
-            // Execute restore script
-            $command = "bash $script $snapshotId";
-            
-            if ($restoreType === 'selective' && !empty($targetPath)) {
-                $command .= " $targetPath";
-            }
-            
-            $output = shell_exec("$command 2>&1");
-            
-            return redirect()->route('backups.index')
-                ->with('success', 'Restore completed successfully!')
-                ->with('output', $output);
-                
-        } catch (\Exception $e) {
-            return redirect()->back()
-                ->with('error', 'Failed to restore: ' . $e->getMessage());
-        }
-    }
-    
-    /**
-     * View backup logs
-     */
-    public function logs(Request $request)
-    {
-        $lines = $request->get('lines', 100);
-        $logs = $this->getBackupLogs($lines);
-        
-        return view('backups.logs', [
-            'logs' => $logs,
-            'lines' => $lines
+        $validator = Validator::make($request->all(), [
+            'backup_path' => 'required'
         ]);
-    }
-    
-    /**
-     * Delete backup snapshot
-     */
-    public function delete($snapshotId)
-    {
+        
+        if ($validator->fails()) {
+            return redirect()->back()
+                ->withErrors($validator);
+        }
+        
         try {
-            // Use restic forget to delete snapshot
-            $command = "restic -r {$this->resticRepo} forget $snapshotId --prune 2>&1";
-            $output = shell_exec($command);
+            $backupPath = $request->input('backup_path');
             
-            if (strpos($output, 'removed') !== false || strpos($output, 'successfully') !== false) {
+            // Validate backup path
+            if (!preg_match('#^/opt/webserver/backups/.+#', $backupPath)) {
+                throw new \Exception('Invalid backup path');
+            }
+            
+            $result = $this->systemCommand->restoreBackup($backupPath);
+            
+            if ($result['success']) {
                 return redirect()->route('backups.index')
-                    ->with('success', "Backup snapshot deleted successfully!");
+                    ->with('success', 'Backup restored successfully!')
+                    ->with('output', $result['output']);
             } else {
-                throw new \Exception("Failed to delete snapshot: $output");
+                return redirect()->back()
+                    ->with('error', 'Restore failed: ' . $result['output']);
             }
-            
         } catch (\Exception $e) {
             return redirect()->back()
-                ->with('error', 'Failed to delete backup: ' . $e->getMessage());
+                ->with('error', 'Error restoring backup: ' . $e->getMessage());
         }
+    }
+    
+    /**
+     * Delete backup
+     */
+    public function destroy($backupName)
+    {
+        try {
+            $backups = $this->systemCommand->listBackups();
+            
+            $backup = null;
+            foreach ($backups as $b) {
+                if ($b['name'] === $backupName) {
+                    $backup = $b;
+                    break;
+                }
+            }
+            
+            if (!$backup) {
+                throw new \Exception('Backup not found');
+            }
+            
+            if (unlink($backup['path'])) {
+                return redirect()->route('backups.index')
+                    ->with('success', 'Backup deleted successfully!');
+            } else {
+                throw new \Exception('Failed to delete backup file');
+            }
+        } catch (\Exception $e) {
+            return redirect()->back()
+                ->with('error', 'Error deleting backup: ' . $e->getMessage());
+        }
+    }
+    
+    /**
+     * Download backup
+     */
+    public function download($backupName)
+    {
+        $backups = $this->systemCommand->listBackups();
+        
+        $backup = null;
+        foreach ($backups as $b) {
+            if ($b['name'] === $backupName) {
+                $backup = $b;
+                break;
+            }
+        }
+        
+        if (!$backup || !file_exists($backup['path'])) {
+            abort(404, 'Backup not found');
+        }
+        
+        return response()->download($backup['path']);
     }
     
     // ========== HELPER METHODS ==========
     
     /**
-     * Get backup statistics
+     * Get available databases
      */
-    private function getBackupStats()
+    private function getAvailableDatabases()
     {
-        $stats = [
-            'total_backups' => 0,
-            'total_size' => '0 B',
-            'last_backup' => 'Never',
-            'last_backup_status' => 'unknown',
-            'disk_usage' => '0%',
-            'disk_available' => '0 B'
-        ];
-        
-        // Check if restic repo exists
-        if (!is_dir($this->resticRepo)) {
-            return $stats;
-        }
-        
-        // Get restic stats
-        $statsOutput = shell_exec("restic -r {$this->resticRepo} stats --json 2>/dev/null");
-        
-        if ($statsOutput) {
-            $statsData = json_decode($statsOutput, true);
-            if ($statsData) {
-                $stats['total_size'] = $this->formatBytes($statsData['total_size'] ?? 0);
-            }
-        }
-        
-        // Count snapshots
-        $snapshotsOutput = shell_exec("restic -r {$this->resticRepo} snapshots --json 2>/dev/null");
-        
-        if ($snapshotsOutput) {
-            $snapshots = json_decode($snapshotsOutput, true);
-            if (is_array($snapshots)) {
-                $stats['total_backups'] = count($snapshots);
+        try {
+            $command = "mysql -e 'SHOW DATABASES' -s --skip-column-names 2>/dev/null";
+            $output = shell_exec($command);
+            
+            if ($output) {
+                $databases = explode("\n", trim($output));
                 
-                // Get last backup time
-                if (!empty($snapshots)) {
-                    $lastSnapshot = end($snapshots);
-                    $stats['last_backup'] = date('Y-m-d H:i:s', strtotime($lastSnapshot['time']));
-                    $stats['last_backup_status'] = 'success';
-                }
+                // Filter out system databases
+                $systemDbs = ['information_schema', 'performance_schema', 'mysql', 'sys'];
+                $databases = array_diff($databases, $systemDbs);
+                
+                return array_values($databases);
             }
+        } catch (\Exception $e) {
+            // Silently fail if can't get databases
         }
         
-        // Get disk usage
-        $diskTotal = disk_total_space($this->backupPath);
-        $diskFree = disk_free_space($this->backupPath);
-        
-        if ($diskTotal && $diskFree) {
-            $diskUsed = $diskTotal - $diskFree;
-            $stats['disk_usage'] = round(($diskUsed / $diskTotal) * 100, 2) . '%';
-            $stats['disk_available'] = $this->formatBytes($diskFree);
-        }
-        
-        return $stats;
+        return [];
     }
     
     /**
-     * Get recent backups
+     * Format bytes
      */
-    private function getRecentBackups($limit = 10)
+    private function formatBytes($bytes)
     {
-        $backups = [];
-        
-        if (!is_dir($this->resticRepo)) {
-            return $backups;
-        }
-        
-        $snapshotsOutput = shell_exec("restic -r {$this->resticRepo} snapshots --json 2>/dev/null");
-        
-        if (!$snapshotsOutput) {
-            return $backups;
-        }
-        
-        $snapshots = json_decode($snapshotsOutput, true);
-        
-        if (!is_array($snapshots)) {
-            return $backups;
-        }
-        
-        // Sort by time (most recent first)
-        usort($snapshots, function($a, $b) {
-            return strtotime($b['time']) - strtotime($a['time']);
-        });
-        
-        // Limit results
-        $snapshots = array_slice($snapshots, 0, $limit);
-        
-        foreach ($snapshots as $snapshot) {
-            $backups[] = [
-                'id' => $snapshot['short_id'],
-                'time' => date('Y-m-d H:i:s', strtotime($snapshot['time'])),
-                'hostname' => $snapshot['hostname'] ?? 'unknown',
-                'paths' => implode(', ', $snapshot['paths'] ?? []),
-                'tags' => implode(', ', $snapshot['tags'] ?? [])
-            ];
-        }
-        
-        return $backups;
-    }
-    
-    /**
-     * Get all backups
-     */
-    private function getAllBackups($type = 'all')
-    {
-        $backups = [];
-        
-        if (!is_dir($this->resticRepo)) {
-            return $backups;
-        }
-        
-        $snapshotsOutput = shell_exec("restic -r {$this->resticRepo} snapshots --json 2>/dev/null");
-        
-        if (!$snapshotsOutput) {
-            return $backups;
-        }
-        
-        $snapshots = json_decode($snapshotsOutput, true);
-        
-        if (!is_array($snapshots)) {
-            return $backups;
-        }
-        
-        foreach ($snapshots as $snapshot) {
-            $paths = implode(', ', $snapshot['paths'] ?? []);
-            $tags = implode(', ', $snapshot['tags'] ?? []);
-            
-            // Filter by type
-            if ($type !== 'all') {
-                if ($type === 'sites' && strpos($paths, '/opt/webserver/sites') === false) {
-                    continue;
-                }
-                if ($type === 'email' && strpos($paths, '/var/mail') === false) {
-                    continue;
-                }
-            }
-            
-            $backups[] = [
-                'id' => $snapshot['id'],
-                'short_id' => $snapshot['short_id'],
-                'time' => date('Y-m-d H:i:s', strtotime($snapshot['time'])),
-                'hostname' => $snapshot['hostname'] ?? 'unknown',
-                'paths' => $paths,
-                'tags' => $tags
-            ];
-        }
-        
-        // Sort by time (most recent first)
-        usort($backups, function($a, $b) {
-            return strtotime($b['time']) - strtotime($a['time']);
-        });
-        
-        return $backups;
-    }
-    
-    /**
-     * Get snapshot details
-     */
-    private function getSnapshotDetails($snapshotId)
-    {
-        $command = "restic -r {$this->resticRepo} snapshots $snapshotId --json 2>/dev/null";
-        $output = shell_exec($command);
-        
-        if (!$output) {
-            return null;
-        }
-        
-        $snapshots = json_decode($output, true);
-        
-        if (!is_array($snapshots) || empty($snapshots)) {
-            return null;
-        }
-        
-        $snapshot = $snapshots[0];
-        
-        // Get file list for this snapshot
-        $filesCommand = "restic -r {$this->resticRepo} ls $snapshotId --json 2>/dev/null | head -100";
-        $filesOutput = shell_exec($filesCommand);
-        
-        $files = [];
-        if ($filesOutput) {
-            $lines = explode("\n", trim($filesOutput));
-            foreach ($lines as $line) {
-                if (empty($line)) continue;
-                $fileData = json_decode($line, true);
-                if ($fileData && isset($fileData['path'])) {
-                    $files[] = $fileData['path'];
-                }
-            }
-        }
-        
-        return [
-            'id' => $snapshot['id'],
-            'short_id' => $snapshot['short_id'],
-            'time' => date('Y-m-d H:i:s', strtotime($snapshot['time'])),
-            'hostname' => $snapshot['hostname'] ?? 'unknown',
-            'paths' => $snapshot['paths'] ?? [],
-            'tags' => $snapshot['tags'] ?? [],
-            'files' => array_slice($files, 0, 100) // Limit to 100 files for display
-        ];
-    }
-    
-    /**
-     * Run backup script
-     */
-    private function runBackupScript($scriptName)
-    {
-        $script = "{$this->scriptsPath}/$scriptName";
-        
-        if (!file_exists($script)) {
-            throw new \Exception("Backup script $scriptName not found");
-        }
-        
-        $command = "bash $script 2>&1";
-        $output = shell_exec($command);
-        
-        return $output;
-    }
-    
-    /**
-     * Get backup logs
-     */
-    private function getBackupLogs($lines = 100)
-    {
-        $logFile = '/var/log/webserver/backup.log';
-        
-        if (!file_exists($logFile)) {
-            return [];
-        }
-        
-        $output = shell_exec("tail -n $lines $logFile 2>/dev/null");
-        
-        if (!$output) {
-            return [];
-        }
-        
-        return array_reverse(explode("\n", trim($output)));
-    }
-    
-    /**
-     * Format bytes to human readable
-     */
-    private function formatBytes($bytes, $precision = 2)
-    {
-        if ($bytes == 0) return '0 B';
-        
         $units = ['B', 'KB', 'MB', 'GB', 'TB'];
-        $base = log($bytes) / log(1024);
         
-        return round(pow(1024, $base - floor($base)), $precision) . ' ' . $units[floor($base)];
+        for ($i = 0; $bytes >= 1024 && $i < count($units) - 1; $i++) {
+            $bytes /= 1024;
+        }
+        
+        return round($bytes, 2) . ' ' . $units[$i];
     }
 }

@@ -55,27 +55,50 @@ class SitesController extends Controller
         }
         
         try {
-            // Execute create-site.sh script
+            // Prepare arguments
             $siteName = $request->site_name;
             $domain = $request->domain;
             $phpVersion = $request->php_version;
-            $createDB = $request->create_database ? 'yes' : 'no';
+            $createDB = $request->has('create_database') && $request->create_database ? '' : '--no-db';
+            $template = $request->input('template', 'php');
             
-            $script = "{$this->scriptsPath}/create-site.sh";
+            // Build command with wrapper
+            $wrapper = "/opt/webserver/scripts/wrappers/create-site-wrapper.sh";
             
-            if (!file_exists($script)) {
-                throw new \Exception("Script create-site.sh not found");
+            $args = [
+                escapeshellarg($siteName),
+                escapeshellarg($domain),
+                escapeshellarg($phpVersion),
+            ];
+            
+            if ($createDB) {
+                $args[] = $createDB;
             }
             
-            // Execute script (this requires proper permissions)
-            $command = "bash $script $siteName $domain $phpVersion $createDB 2>&1";
+            $args[] = "--template=" . escapeshellarg($template);
+            
+            $command = "sudo " . $wrapper . " " . implode(" ", $args) . " 2>&1";
+            
+            // Execute command
             $output = shell_exec($command);
             
+            // Check if site was created successfully
+            if (strpos($output, 'successfully') === false && strpos($output, 'ERROR') !== false) {
+                throw new \Exception("Site creation failed: " . substr($output, 0, 500));
+            }
+            
             // Parse output for credentials
-            $credentials = $this->parseCredentials($output);
+            $credentialsFile = "/opt/webserver/sites/$siteName/CREDENTIALS.txt";
+            $credentials = [];
+            
+            if (file_exists($credentialsFile)) {
+                $credContent = file_get_contents($credentialsFile);
+                $credentials = $this->parseCredentialsFromFile($credContent);
+            }
             
             return redirect()->route('sites.index')
                 ->with('success', 'Site created successfully!')
+                ->with('output', $output)
                 ->with('credentials', $credentials);
                 
         } catch (\Exception $e) {
@@ -350,9 +373,9 @@ class SitesController extends Controller
             'domain' => $domain,
             'path' => $sitePath,
             'disk_usage' => $diskUsage,
-            'php_version' => $phpVersion,
-            'ssl_enabled' => $sslEnabled,
-            'is_active' => $isActive,
+            'phpVersion' => $phpVersion,  // Fixed: camelCase for view compatibility
+            'ssl' => $sslEnabled,  // Fixed: shorter key name for view
+            'nginxEnabled' => $isActive,  // Fixed: renamed for view compatibility
             'created_at' => filectime($sitePath)
         ];
     }
@@ -376,19 +399,55 @@ class SitesController extends Controller
      */
     private function getDomainFromNginx($siteName)
     {
-        $nginxConfig = "/etc/nginx/sites-available/$siteName";
-        
-        if (!file_exists($nginxConfig)) {
+        try {
+            // Try common NGINX config filename patterns
+            $possibleConfigs = [
+                "/etc/nginx/sites-available/$siteName",
+                "/etc/nginx/sites-available/$siteName.conf",
+            ];
+            
+            // Also try to find by pattern (e.g., sitename.domain.com.conf)
+            $sitesAvailableDir = '/etc/nginx/sites-available';
+            if (@is_dir($sitesAvailableDir)) {
+                $files = @scandir($sitesAvailableDir);
+                if ($files) {
+                    foreach ($files as $file) {
+                        if (strpos($file, $siteName) === 0 && strpos($file, '.conf') !== false) {
+                            $possibleConfigs[] = "$sitesAvailableDir/$file";
+                        }
+                    }
+                }
+            }
+            
+            foreach ($possibleConfigs as $nginxConfig) {
+                if (@file_exists($nginxConfig)) {
+                    $content = @file_get_contents($nginxConfig);
+                    
+                    if ($content && preg_match('/server_name\s+([a-z0-9\.\-]+)/', $content, $matches)) {
+                        // Return first domain (skip www, IP, and underscore)
+                        $serverNames = preg_split('/\s+/', $matches[0]);
+                        foreach ($serverNames as $name) {
+                            if ($name !== 'server_name' && 
+                                $name !== '_' && 
+                                !preg_match('/^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}$/', $name) &&
+                                strpos($name, 'www.') !== 0) {
+                                return rtrim($name, ';');
+                            }
+                        }
+                        // If no clean domain found, return first non-underscore
+                        if (isset($serverNames[1]) && $serverNames[1] !== '_') {
+                            return rtrim($serverNames[1], ';');
+                        }
+                    }
+                    break;
+                }
+            }
+            
+            return 'N/A';
+        } catch (\Exception $e) {
+            // Fallback if open_basedir restricts access
             return 'N/A';
         }
-        
-        $content = file_get_contents($nginxConfig);
-        
-        if (preg_match('/server_name\s+([a-z0-9\.\-]+);/', $content, $matches)) {
-            return $matches[1];
-        }
-        
-        return 'N/A';
     }
     
     /**
@@ -396,13 +455,17 @@ class SitesController extends Controller
      */
     private function getPhpVersion($siteName)
     {
-        $poolFile = "/etc/php/8.3/fpm/pool.d/{$siteName}.conf";
-        
-        if (file_exists($poolFile)) {
-            return '8.3';
+        try {
+            $poolFile = "/etc/php/8.3/fpm/pool.d/{$siteName}.conf";
+            
+            if (@file_exists($poolFile)) {
+                return '8.3';
+            }
+            
+            return 'N/A';
+        } catch (\Exception $e) {
+            return 'N/A';
         }
-        
-        return 'N/A';
     }
     
     /**
@@ -410,15 +473,20 @@ class SitesController extends Controller
      */
     private function isSSLEnabled($siteName)
     {
-        $nginxConfig = "/etc/nginx/sites-available/$siteName";
-        
-        if (!file_exists($nginxConfig)) {
+        try {
+            // Try to find NGINX config file
+            $configFile = $this->findNginxConfig($siteName);
+            
+            if (!$configFile || !@file_exists($configFile)) {
+                return false;
+            }
+            
+            $content = @file_get_contents($configFile);
+            
+            return ($content && strpos($content, 'ssl_certificate') !== false);
+        } catch (\Exception $e) {
             return false;
         }
-        
-        $content = file_get_contents($nginxConfig);
-        
-        return (strpos($content, 'ssl_certificate') !== false);
     }
     
     /**
@@ -426,9 +494,68 @@ class SitesController extends Controller
      */
     private function isSiteActive($siteName)
     {
-        $symlink = "/etc/nginx/sites-enabled/$siteName";
-        
-        return file_exists($symlink);
+        try {
+            // Try common patterns
+            $possibleSymlinks = [
+                "/etc/nginx/sites-enabled/$siteName",
+                "/etc/nginx/sites-enabled/$siteName.conf",
+            ];
+            
+            // Also scan directory
+            $sitesEnabledDir = '/etc/nginx/sites-enabled';
+            if (@is_dir($sitesEnabledDir)) {
+                $files = @scandir($sitesEnabledDir);
+                if ($files) {
+                    foreach ($files as $file) {
+                        if (strpos($file, $siteName) === 0) {
+                            return true;
+                        }
+                    }
+                }
+            }
+            
+            return false;
+        } catch (\Exception $e) {
+            return false;
+        }
+    }
+    
+    /**
+     * Find NGINX config file for a site
+     */
+    private function findNginxConfig($siteName)
+    {
+        try {
+            $sitesAvailableDir = '/etc/nginx/sites-available';
+            
+            // Try common patterns first
+            $patterns = [
+                "$sitesAvailableDir/$siteName",
+                "$sitesAvailableDir/$siteName.conf",
+            ];
+            
+            foreach ($patterns as $file) {
+                if (@file_exists($file)) {
+                    return $file;
+                }
+            }
+            
+            // Scan directory for matching files
+            if (@is_dir($sitesAvailableDir)) {
+                $files = @scandir($sitesAvailableDir);
+                if ($files) {
+                    foreach ($files as $file) {
+                        if (strpos($file, $siteName) === 0 && strpos($file, '.conf') !== false) {
+                            return "$sitesAvailableDir/$file";
+                        }
+                    }
+                }
+            }
+            
+            return null;
+        } catch (\Exception $e) {
+            return null;
+        }
     }
     
     /**
@@ -509,6 +636,46 @@ class SitesController extends Controller
         // Parse DB password
         if (preg_match('/DB Password:\s+(\S+)/', $output, $matches)) {
             $credentials['db_password'] = $matches[1];
+        }
+        
+        return $credentials;
+    }
+    
+    /**
+     * Parse credentials from CREDENTIALS.txt file
+     */
+    private function parseCredentialsFromFile($content)
+    {
+        $credentials = [];
+        
+        // Extract SSH username
+        if (preg_match('/Username:\s*(.+)/m', $content, $matches)) {
+            $credentials['ssh_username'] = trim($matches[1]);
+        }
+        
+        // Extract SSH password
+        if (preg_match('/Password:\s*(.+)/m', $content, $matches)) {
+            $credentials['ssh_password'] = trim($matches[1]);
+        }
+        
+        // Extract database name
+        if (preg_match('/Database Name:\s*(.+)/m', $content, $matches)) {
+            $credentials['database'] = trim($matches[1]);
+        }
+        
+        // Extract database user
+        if (preg_match('/Database User:\s*(.+)/m', $content, $matches)) {
+            $credentials['db_user'] = trim($matches[1]);
+        }
+        
+        // Extract database password
+        if (preg_match('/Database Password:\s*(.+)/m', $content, $matches)) {
+            $credentials['db_password'] = trim($matches[1]);
+        }
+        
+        // Extract domain
+        if (preg_match('/Primary Domain:\s*(.+)/m', $content, $matches)) {
+            $credentials['domain'] = trim($matches[1]);
         }
         
         return $credentials;
