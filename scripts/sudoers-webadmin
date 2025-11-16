@@ -13,6 +13,7 @@ www-data ALL=(root) NOPASSWD: /opt/webserver/scripts/wrappers/nginx-test.sh
 www-data ALL=(root) NOPASSWD: /opt/webserver/scripts/wrappers/create-backup.sh
 www-data ALL=(root) NOPASSWD: /opt/webserver/scripts/wrappers/restore-backup.sh
 www-data ALL=(root) NOPASSWD: /opt/webserver/scripts/wrappers/site-toggle.sh
+www-data ALL=(root) NOPASSWD: /opt/webserver/scripts/wrappers/create-site-wrapper.sh
 
 # Allow www-data to read system information
 www-data ALL=(root) NOPASSWD: /usr/bin/systemctl status *

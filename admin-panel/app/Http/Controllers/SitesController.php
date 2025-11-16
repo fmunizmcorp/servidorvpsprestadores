@@ -55,27 +55,50 @@ class SitesController extends Controller
         }
         
         try {
-            // Execute create-site.sh script
+            // Prepare arguments
             $siteName = $request->site_name;
             $domain = $request->domain;
             $phpVersion = $request->php_version;
-            $createDB = $request->create_database ? 'yes' : 'no';
+            $createDB = $request->has('create_database') && $request->create_database ? '' : '--no-db';
+            $template = $request->input('template', 'php');
             
-            $script = "{$this->scriptsPath}/create-site.sh";
+            // Build command with wrapper
+            $wrapper = "/opt/webserver/scripts/wrappers/create-site-wrapper.sh";
             
-            if (!file_exists($script)) {
-                throw new \Exception("Script create-site.sh not found");
+            $args = [
+                escapeshellarg($siteName),
+                escapeshellarg($domain),
+                escapeshellarg($phpVersion),
+            ];
+            
+            if ($createDB) {
+                $args[] = $createDB;
             }
             
-            // Execute script (this requires proper permissions)
-            $command = "bash $script $siteName $domain $phpVersion $createDB 2>&1";
+            $args[] = "--template=" . escapeshellarg($template);
+            
+            $command = "sudo " . $wrapper . " " . implode(" ", $args) . " 2>&1";
+            
+            // Execute command
             $output = shell_exec($command);
             
+            // Check if site was created successfully
+            if (strpos($output, 'successfully') === false && strpos($output, 'ERROR') !== false) {
+                throw new \Exception("Site creation failed: " . substr($output, 0, 500));
+            }
+            
             // Parse output for credentials
-            $credentials = $this->parseCredentials($output);
+            $credentialsFile = "/opt/webserver/sites/$siteName/CREDENTIALS.txt";
+            $credentials = [];
+            
+            if (file_exists($credentialsFile)) {
+                $credContent = file_get_contents($credentialsFile);
+                $credentials = $this->parseCredentialsFromFile($credContent);
+            }
             
             return redirect()->route('sites.index')
                 ->with('success', 'Site created successfully!')
+                ->with('output', $output)
                 ->with('credentials', $credentials);
                 
         } catch (\Exception $e) {
@@ -613,6 +636,46 @@ class SitesController extends Controller
         // Parse DB password
         if (preg_match('/DB Password:\s+(\S+)/', $output, $matches)) {
             $credentials['db_password'] = $matches[1];
+        }
+        
+        return $credentials;
+    }
+    
+    /**
+     * Parse credentials from CREDENTIALS.txt file
+     */
+    private function parseCredentialsFromFile($content)
+    {
+        $credentials = [];
+        
+        // Extract SSH username
+        if (preg_match('/Username:\s*(.+)/m', $content, $matches)) {
+            $credentials['ssh_username'] = trim($matches[1]);
+        }
+        
+        // Extract SSH password
+        if (preg_match('/Password:\s*(.+)/m', $content, $matches)) {
+            $credentials['ssh_password'] = trim($matches[1]);
+        }
+        
+        // Extract database name
+        if (preg_match('/Database Name:\s*(.+)/m', $content, $matches)) {
+            $credentials['database'] = trim($matches[1]);
+        }
+        
+        // Extract database user
+        if (preg_match('/Database User:\s*(.+)/m', $content, $matches)) {
+            $credentials['db_user'] = trim($matches[1]);
+        }
+        
+        // Extract database password
+        if (preg_match('/Database Password:\s*(.+)/m', $content, $matches)) {
+            $credentials['db_password'] = trim($matches[1]);
+        }
+        
+        // Extract domain
+        if (preg_match('/Primary Domain:\s*(.+)/m', $content, $matches)) {
+            $credentials['domain'] = trim($matches[1]);
         }
         
         return $credentials;
