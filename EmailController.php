@@ -126,14 +126,12 @@ class EmailController extends Controller
                 throw new \Exception("Script create-email.sh not found");
             }
             
-            // Create temporary file with password
-            $passFile = "/tmp/email-pass-" . uniqid();
-            file_put_contents($passFile, $password);
-            
-            $command = "bash $script $email $quota < $passFile 2>&1";
+            // Script expects: domain username password quota
+            $command = "bash $script " . escapeshellarg($domain) . " " . 
+                       escapeshellarg($username) . " " . 
+                       escapeshellarg($password) . " " . 
+                       escapeshellarg($quota) . " 2>&1";
             $output = shell_exec($command);
-            
-            unlink($passFile);
             
             return redirect()->route('email.accounts', ['domain' => $domain])
                 ->with('success', "Email account $email created successfully!");
