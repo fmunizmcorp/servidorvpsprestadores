@@ -1,0 +1,75 @@
+================================================================================
+COMANDOS PARA EXECUTAR NO TERMINAL DO SERVIDOR (VIA CONSOLE WEB)
+================================================================================
+
+COPIE E COLE ESTES COMANDOS DIRETAMENTE NO TERMINAL DO SERVIDOR:
+
+--------------------------------------------------------------------------------
+SOLUÇÃO 1: FIX RÁPIDO (RECOMENDADO)
+--------------------------------------------------------------------------------
+
+ufw allow 22/tcp && ufw allow ssh && ufw reload && ufw status verbose
+
+
+--------------------------------------------------------------------------------
+SOLUÇÃO 2: SE SOLUÇÃO 1 NÃO FUNCIONAR (EMERGÊNCIA)
+--------------------------------------------------------------------------------
+
+ufw disable && systemctl restart ssh && ufw status
+
+
+--------------------------------------------------------------------------------
+SOLUÇÃO 3: RECONFIGURAR UFW COMPLETAMENTE (APÓS RECUPERAR SSH)
+--------------------------------------------------------------------------------
+
+ufw --force reset && \
+ufw default deny incoming && \
+ufw default allow outgoing && \
+ufw allow 22/tcp comment 'SSH' && \
+ufw allow 80/tcp comment 'HTTP' && \
+ufw allow 443/tcp comment 'HTTPS' && \
+ufw allow 8080/tcp comment 'Admin Panel' && \
+ufw allow 25/tcp comment 'SMTP' && \
+ufw allow 587/tcp comment 'SMTP Submission' && \
+ufw allow 465/tcp comment 'SMTPS' && \
+ufw allow 143/tcp comment 'IMAP' && \
+ufw allow 993/tcp comment 'IMAPS' && \
+ufw allow 110/tcp comment 'POP3' && \
+ufw allow 995/tcp comment 'POP3S' && \
+ufw --force enable && \
+ufw status verbose
+
+
+--------------------------------------------------------------------------------
+VERIFICAÇÕES
+--------------------------------------------------------------------------------
+
+# Verificar status do UFW
+ufw status verbose
+
+# Verificar se SSH está rodando
+systemctl status ssh
+
+# Verificar se porta 22 está aberta
+ss -tlnp | grep :22
+
+# Ver regras do UFW numeradas
+ufw status numbered
+
+
+--------------------------------------------------------------------------------
+APÓS EXECUTAR
+--------------------------------------------------------------------------------
+
+1. Teste SSH de outra máquina:
+   ssh root@72.61.53.222
+
+2. Se funcionar, ME INFORME escrevendo:
+   "SSH FUNCIONANDO"
+
+3. Vou continuar automaticamente com todo o deployment
+
+
+================================================================================
+IMPORTANTE: NÃO FECHE o console até confirmar que SSH externo funciona!
+================================================================================
