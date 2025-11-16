@@ -1,0 +1,321 @@
+╔══════════════════════════════════════════════════════════════════════════════╗
+║                                                                              ║
+║                  🚀 REFERÊNCIA RÁPIDA - SERVIDOR VPS                         ║
+║                                                                              ║
+╚══════════════════════════════════════════════════════════════════════════════╝
+
+
+┌──────────────────────────────────────────────────────────────────────────────┐
+│                            📍 ACESSOS PRINCIPAIS                             │
+└──────────────────────────────────────────────────────────────────────────────┘
+
+  🖥️  SERVIDOR SSH
+      ssh root@72.61.53.222
+      Senha: Jm@D@KDPnw7Q
+      Porta: 22
+
+  🎛️  PAINEL ADMIN
+      http://72.61.53.222:8080
+      Email: admin@localhost
+      Senha: Admin@2025!
+
+
+┌──────────────────────────────────────────────────────────────────────────────┐
+│                          🌐 MÓDULOS DO PAINEL                                │
+└──────────────────────────────────────────────────────────────────────────────┘
+
+  Dashboard        → http://72.61.53.222:8080/dashboard
+  Sites            → http://72.61.53.222:8080/sites
+  Email            → http://72.61.53.222:8080/email
+  Backups          → http://72.61.53.222:8080/backups
+  Security         → http://72.61.53.222:8080/security
+  Monitoring       → http://72.61.53.222:8080/monitoring
+
+
+┌──────────────────────────────────────────────────────────────────────────────┐
+│                        🚀 CRIAR SITE (VIA PAINEL)                            │
+└──────────────────────────────────────────────────────────────────────────────┘
+
+  1. Acesse: http://72.61.53.222:8080/sites
+  2. Clique: "Create New Site"
+  3. Preencha:
+     - Nome: exemplo
+     - Domínio: exemplo.com.br
+     - PHP: 8.3
+     - Banco: ☑ Sim
+  4. Copie as credenciais geradas
+  5. Upload arquivos via SFTP:
+     - Host: 72.61.53.222:22
+     - User: site_exemplo
+     - Dir: /opt/webserver/sites/exemplo/public_html/
+  6. Configure DNS: A → 72.61.53.222
+  7. Gere SSL: Sites → exemplo → SSL
+
+
+┌──────────────────────────────────────────────────────────────────────────────┐
+│                        🚀 CRIAR SITE (VIA SCRIPT)                            │
+└──────────────────────────────────────────────────────────────────────────────┘
+
+  ssh root@72.61.53.222
+  cd /opt/webserver/scripts
+  ./create-site.sh exemplo exemplo.com.br 8.3 yes
+  # Copie as credenciais exibidas
+
+
+┌──────────────────────────────────────────────────────────────────────────────┐
+│                         📁 ESTRUTURA DE ARQUIVOS                             │
+└──────────────────────────────────────────────────────────────────────────────┘
+
+  /opt/webserver/
+  ├── admin-panel/                    # Painel administrativo Laravel
+  │   ├── app/Http/Controllers/       # Controllers
+  │   ├── resources/views/            # Views Blade
+  │   ├── routes/web.php              # Rotas
+  │   └── storage/logs/               # Logs do painel
+  │
+  ├── sites/                          # Sites hospedados
+  │   ├── [site1]/
+  │   │   ├── public_html/            # Arquivos públicos
+  │   │   ├── logs/                   # Logs NGINX
+  │   │   ├── ssl/                    # Certificados
+  │   │   └── backup/                 # Backups locais
+  │   └── [site2]/...
+  │
+  └── scripts/                        # Scripts de automação
+      ├── create-site.sh              # Criar site
+      ├── backup.sh                   # Backup
+      ├── monitor.sh                  # Monitoramento
+      └── [outros scripts]
+
+
+┌──────────────────────────────────────────────────────────────────────────────┐
+│                      🔧 COMANDOS ÚTEIS (VIA SSH)                             │
+└──────────────────────────────────────────────────────────────────────────────┘
+
+  📊 STATUS DOS SERVIÇOS
+     systemctl status nginx php8.3-fpm mariadb redis postfix dovecot
+     systemctl is-active nginx
+
+  🔄 REINICIAR SERVIÇOS
+     systemctl restart nginx
+     systemctl restart php8.3-fpm
+     systemctl reload nginx              # Sem downtime
+
+  📝 VER LOGS
+     tail -f /var/log/nginx/error.log
+     tail -f /var/log/mail.log
+     tail -f /opt/webserver/sites/[site]/logs/error.log
+
+  💾 BACKUP MANUAL
+     /opt/webserver/scripts/backup.sh [sitename]
+
+  🔐 CRIAR USUÁRIO ADMIN (PAINEL)
+     cd /opt/webserver/admin-panel
+     php artisan tinker --execute="
+         \$user = App\\Models\\User::create([
+             'name' => 'Admin',
+             'email' => 'admin@localhost',
+             'password' => bcrypt('Admin@2025!')
+         ]);
+         echo 'Created: ' . \$user->email;
+     "
+
+  🔥 VERIFICAR FIREWALL
+     ufw status
+     ufw allow 22/tcp
+     ufw reload
+
+  🔒 GERAR SSL
+     certbot --nginx -d exemplo.com.br -d www.exemplo.com.br
+
+  🗄️ MYSQL
+     mysql -u root -pJm@D@KDPnw7Q
+     mysql> SHOW DATABASES;
+     mysql> exit
+
+
+┌──────────────────────────────────────────────────────────────────────────────┐
+│                        📧 CONFIGURAÇÃO DE EMAIL                              │
+└──────────────────────────────────────────────────────────────────────────────┘
+
+  ⚙️ REGISTROS DNS NECESSÁRIOS (No provedor do domínio)
+
+  MX Record:
+     exemplo.com.br.  IN  MX  10  mail.exemplo.com.br.
+     mail.exemplo.com.br.  IN  A  72.61.53.222
+
+  SPF Record (TXT):
+     exemplo.com.br.  IN  TXT  "v=spf1 ip4:72.61.53.222 -all"
+
+  DKIM Record (TXT):
+     # Gerar com: cat /etc/opendkim/keys/exemplo.com.br/mail.txt
+     mail._domainkey.exemplo.com.br.  IN  TXT  "v=DKIM1; k=rsa; p=..."
+
+  DMARC Record (TXT):
+     _dmarc.exemplo.com.br.  IN  TXT  "v=DMARC1; p=quarantine; rua=mailto:admin@exemplo.com.br"
+
+  PTR Record (rDNS - Configurar no provedor VPS):
+     72.61.53.222  →  mail.exemplo.com.br
+
+
+  📬 CRIAR CONTA DE EMAIL (VIA SSH)
+     # Criar usuário virtual
+     echo "usuario@exemplo.com.br:{PLAIN}senha123" >> /etc/dovecot/users
+     
+     # Criar maildir
+     mkdir -p /var/mail/vmail/exemplo.com.br/usuario
+     chown -R vmail:vmail /var/mail/vmail/
+     
+     # Testar envio
+     echo "Test" | mail -s "Test" destino@example.com
+
+
+┌──────────────────────────────────────────────────────────────────────────────┐
+│                           🛡️ VERIFICAR SEGURANÇA                             │
+└──────────────────────────────────────────────────────────────────────────────┘
+
+  UFW (Firewall):
+     ufw status verbose
+     ufw allow 80/tcp
+     ufw allow 443/tcp
+     ufw reload
+
+  Fail2Ban:
+     fail2ban-client status
+     fail2ban-client status sshd
+     fail2ban-client unban 192.168.1.1
+
+  ClamAV:
+     freshclam                          # Atualizar definições
+     clamscan -r /opt/webserver/sites/  # Scan completo
+     systemctl status clamav-daemon
+
+
+┌──────────────────────────────────────────────────────────────────────────────┐
+│                         📊 MONITORAMENTO (VIA SSH)                           │
+└──────────────────────────────────────────────────────────────────────────────┘
+
+  CPU e Memória:
+     top
+     htop
+     free -h
+     df -h
+
+  Processos PHP-FPM:
+     ps aux | grep php-fpm
+     watch -n 2 'ps aux | grep php-fpm'
+
+  Conexões Ativas:
+     netstat -tupln
+     ss -tunlp
+
+  Uso de Disco:
+     du -sh /opt/webserver/sites/*
+     du -sh /var/mail/*
+
+  Fila de Email:
+     mailq
+     postqueue -p
+
+
+┌──────────────────────────────────────────────────────────────────────────────┐
+│                        🚨 TROUBLESHOOTING RÁPIDO                             │
+└──────────────────────────────────────────────────────────────────────────────┘
+
+  Site retorna 404:
+     → Verificar se arquivos estão em public_html/
+     → ls -la /opt/webserver/sites/[site]/public_html/
+
+  Site retorna 502:
+     → PHP-FPM não rodando
+     → systemctl restart php8.3-fpm
+
+  Site retorna 403:
+     → Permissões incorretas
+     → chown -R site_[nome]:site_[nome] /opt/webserver/sites/[nome]/
+     → chmod -R 755 /opt/webserver/sites/[nome]/public_html/
+
+  Painel admin erro 500:
+     → tail -100 /var/log/nginx/admin-error.log
+     → tail -100 /opt/webserver/admin-panel/storage/logs/laravel.log
+     → cd /opt/webserver/admin-panel && php artisan cache:clear
+
+  Email não envia:
+     → tail -100 /var/log/mail.log
+     → mailq
+     → postqueue -f
+
+  SSH bloqueado:
+     → Console web: ufw allow 22/tcp && ufw reload
+     → Ou: ufw disable
+
+
+┌──────────────────────────────────────────────────────────────────────────────┐
+│                        📚 DOCUMENTAÇÃO COMPLETA                              │
+└──────────────────────────────────────────────────────────────────────────────┘
+
+  /home/user/webapp/
+  ├── ACESSO-COMPLETO-SERVIDOR.md      # Guia completo de acesso
+  ├── GUIA-IMPLANTACAO-SITE.md         # Passo a passo implantação
+  ├── GUIA-COMPLETO-USO.md             # Manual completo
+  ├── PLANO-COMPLETO-SPRINTS.md        # Todos os 21 sprints
+  ├── README.md                        # Overview geral
+  └── QUICK-REFERENCE.txt              # Este arquivo
+
+  GitHub:
+  https://github.com/fmunizmcorp/servidorvpsprestadores
+
+
+┌──────────────────────────────────────────────────────────────────────────────┐
+│                           ✅ STATUS ATUAL: 70%                               │
+└──────────────────────────────────────────────────────────────────────────────┘
+
+  ✅ COMPLETO:
+     • Painel administrativo (Dashboard, Sites, Email, Backups, Security, Monitoring)
+     • 51 views Blade templates
+     • 6 controllers completos
+     • Routes configuradas
+     • Multi-tenant structure (NGINX, PHP-FPM pools, MySQL)
+     • Firewall UFW
+     • Fail2Ban
+     • Backups automáticos (Restic)
+     • Monitoring scripts (7 scripts)
+     • SSL Let's Encrypt
+     • FastCGI cache
+
+  🔴 PENDENTE (30%):
+     • Roundcube webmail (Sprint 7 - 1h)
+     • SpamAssassin integration (Sprint 8 - 30min)
+     • End-to-end testing (Sprint 14 - 2h)
+     • Final documentation (Sprint 15 - 1h)
+
+  ⏱️ TEMPO PARA 100%: ~4-5 horas
+
+
+┌──────────────────────────────────────────────────────────────────────────────┐
+│                      ⚡ PRÓXIMA AÇÃO: PRONTO PARA SITES                      │
+└──────────────────────────────────────────────────────────────────────────────┘
+
+  ✅ SERVIDOR PRONTO PARA RECEBER SITES AGORA!
+
+  Você pode:
+  1. Criar seu primeiro site via painel ou script
+  2. Fazer upload dos arquivos
+  3. Configurar DNS
+  4. Gerar SSL
+  5. Site no ar!
+
+  O email funciona, mas Roundcube webmail ainda não está configurado.
+  Você pode enviar/receber emails via qualquer cliente (Thunderbird, Outlook, etc).
+
+
+╔══════════════════════════════════════════════════════════════════════════════╗
+║                                                                              ║
+║   🎉 SERVIDOR OPERACIONAL E PRONTO PARA HOSPEDAR SITES! 🎉                  ║
+║                                                                              ║
+╚══════════════════════════════════════════════════════════════════════════════╝
+
+
+Criado em: 2025-11-16
+Última atualização: 2025-11-16 03:30 UTC
+Versão: 1.0
