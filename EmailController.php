@@ -204,26 +204,26 @@ class EmailController extends Controller
     private function getEmailStats()
     {
         $stats = [
-            'total_domains' => 0,
-            'total_accounts' => 0,
-            'emails_sent_today' => 0,
-            'emails_received_today' => 0,
-            'spam_blocked_today' => 0,
-            'queue_size' => 0
+            'domains' => 0,
+            'accounts' => 0,
+            'sentToday' => 0,
+            'receivedToday' => 0,
+            'spamBlocked' => 0,
+            'queueSize' => 0
         ];
         
         // Count domains
         $domainsFile = "{$this->postfixPath}/virtual_domains";
         if (file_exists($domainsFile)) {
             $domains = file($domainsFile, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES);
-            $stats['total_domains'] = count($domains);
+            $stats['domains'] = count($domains);
         }
         
         // Count accounts
         $accountsFile = "{$this->postfixPath}/virtual_mailbox_maps";
         if (file_exists($accountsFile)) {
             $accounts = file($accountsFile, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES);
-            $stats['total_accounts'] = count(array_filter($accounts, function($line) {
+            $stats['accounts'] = count(array_filter($accounts, function($line) {
                 return !empty(trim($line)) && strpos($line, '#') !== 0;
             }));
         }
@@ -236,17 +236,17 @@ class EmailController extends Controller
             $logContent = shell_exec("grep '$today' $mailLog 2>/dev/null");
             
             if ($logContent) {
-                $stats['emails_sent_today'] = substr_count($logContent, 'status=sent');
-                $stats['emails_received_today'] = substr_count($logContent, 'from=<');
-                $stats['spam_blocked_today'] = substr_count(strtolower($logContent), 'spam') + 
-                                               substr_count(strtolower($logContent), 'reject');
+                $stats['sentToday'] = substr_count($logContent, 'status=sent');
+                $stats['receivedToday'] = substr_count($logContent, 'from=<');
+                $stats['spamBlocked'] = substr_count(strtolower($logContent), 'spam') + 
+                                        substr_count(strtolower($logContent), 'reject');
             }
         }
         
         // Get queue size
         $queueOutput = shell_exec('mailq 2>/dev/null | tail -1');
         if ($queueOutput && preg_match('/(\d+) Request/', $queueOutput, $matches)) {
-            $stats['queue_size'] = (int)$matches[1];
+            $stats['queueSize'] = (int)$matches[1];
         }
         
         return $stats;
@@ -278,9 +278,9 @@ class EmailController extends Controller
             
             $domains[] = [
                 'name' => $line,
-                'account_count' => $accountCount,
-                'disk_usage' => $diskUsage,
-                'dns_status' => $dnsStatus
+                'accountCount' => $accountCount,
+                'diskUsage' => $diskUsage,
+                'dnsStatus' => $dnsStatus
             ];
         }
         
@@ -385,25 +385,26 @@ class EmailController extends Controller
                 list($email, $path) = explode(' ', $line, 2);
                 
                 $mailPath = "/var/mail/vhosts/$domain/" . explode('@', $email)[0];
-                $diskUsage = '0';
-                $lastAccess = 'Never';
+                $diskUsageBytes = 0;
+                $diskUsageStr = '0 MB';
+                $quotaMB = 1024; // Default quota 1GB
                 
                 if (is_dir($mailPath)) {
-                    $duOutput = shell_exec("du -sh $mailPath 2>/dev/null");
+                    $duOutput = shell_exec("du -sb $mailPath 2>/dev/null");
                     if ($duOutput) {
-                        $diskUsage = trim(explode("\t", $duOutput)[0]);
-                    }
-                    
-                    $lastAccessTime = filemtime($mailPath);
-                    if ($lastAccessTime) {
-                        $lastAccess = date('Y-m-d H:i', $lastAccessTime);
+                        $diskUsageBytes = (int)trim(explode("\t", $duOutput)[0]);
+                        $diskUsageMB = round($diskUsageBytes / 1024 / 1024, 2);
+                        $diskUsageStr = $diskUsageMB . ' MB';
                     }
                 }
                 
+                $usagePercent = $quotaMB > 0 ? min(100, round(($diskUsageBytes / 1024 / 1024 / $quotaMB) * 100, 1)) : 0;
+                
                 $accounts[] = [
                     'email' => $email,
-                    'disk_usage' => $diskUsage,
-                    'last_access' => $lastAccess
+                    'quota' => $quotaMB . ' MB',
+                    'used' => $diskUsageStr,
+                    'usagePercent' => $usagePercent
                 ];
             }
         }

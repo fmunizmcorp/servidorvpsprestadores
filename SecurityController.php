@@ -10,8 +10,16 @@ class SecurityController extends Controller
     {
         $securityStatus = $this->getSecurityStatus();
         
+        // Map to view-expected keys
+        $stats = [
+            'activeRules' => count($this->getFirewallRules()),
+            'bannedIPs' => $securityStatus['banned_ips_count'] ?? 0,
+            'lastScan' => $securityStatus['last_scan'] ?? 'Never'
+        ];
+        
         return view('security.index', [
-            'status' => $securityStatus
+            'status' => $securityStatus,
+            'stats' => $stats
         ]);
     }
     
@@ -24,16 +32,54 @@ class SecurityController extends Controller
         ]);
     }
     
-    public function addFirewallRule(Request $request)
+    public function addRule(Request $request)
     {
+        $action = $request->action ?? 'allow';
         $port = $request->port;
+        $from = $request->from;
         $protocol = $request->protocol ?? 'tcp';
         
-        $command = "ufw allow $port/$protocol 2>&1";
+        // Validate inputs
+        if (empty($port)) {
+            return redirect()->back()
+                ->with('error', 'Port is required');
+        }
+        
+        // Build UFW command
+        $command = "ufw $action";
+        
+        if ($from) {
+            $command .= " from $from";
+        }
+        
+        $command .= " to any port $port proto $protocol 2>&1";
+        
         $output = shell_exec($command);
         
         return redirect()->route('security.firewall')
-            ->with('success', "Firewall rule added: $port/$protocol");
+            ->with('success', "Firewall rule added: $action $port/$protocol" . ($from ? " from $from" : ""));
+    }
+    
+    public function addFirewallRule(Request $request)
+    {
+        // Legacy method - redirect to addRule
+        return $this->addRule($request);
+    }
+    
+    public function deleteRule(Request $request)
+    {
+        $number = $request->number;
+        
+        if (empty($number)) {
+            return redirect()->back()
+                ->with('error', 'Rule number is required');
+        }
+        
+        $command = "ufw --force delete $number 2>&1";
+        $output = shell_exec($command);
+        
+        return redirect()->route('security.firewall')
+            ->with('success', "Firewall rule #$number deleted");
     }
     
     public function fail2ban()
@@ -64,7 +110,11 @@ class SecurityController extends Controller
         $clamavStatus = $this->getClamAVStatus();
         
         return view('security.clamav', [
-            'status' => $clamavStatus
+            'status' => $clamavStatus,
+            'lastUpdate' => $clamavStatus['last_update'] ?? 'Unknown',
+            'active' => $clamavStatus['active'] ?? false,
+            'version' => $clamavStatus['version'] ?? 'Unknown',
+            'signatures' => $clamavStatus['signatures'] ?? 0
         ]);
     }
     
