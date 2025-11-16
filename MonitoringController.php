@@ -146,9 +146,9 @@ class MonitoringController extends Controller
             $minutes = floor(($uptimeSeconds % 3600) / 60);
             
             $parts = [];
-            if ($days > 0) $parts[] = \"$days day\" . ($days != 1 ? 's' : '');
-            if ($hours > 0) $parts[] = \"$hours hour\" . ($hours != 1 ? 's' : '');
-            if ($minutes > 0) $parts[] = \"$minutes minute\" . ($minutes != 1 ? 's' : '');
+            if ($days > 0) $parts[] = "$days day" . ($days != 1 ? 's' : '');
+            if ($hours > 0) $parts[] = "$hours hour" . ($hours != 1 ? 's' : '');
+            if ($minutes > 0) $parts[] = "$minutes minute" . ($minutes != 1 ? 's' : '');
             
             $uptime = implode(', ', $parts) ?: 'Just started';
         }
@@ -217,11 +217,11 @@ class MonitoringController extends Controller
     
     private function getTopProcesses($limit = 20)
     {
-        $output = shell_exec(\"ps aux --sort=-%cpu | head -n \" . ($limit + 1));
+        $output = shell_exec("ps aux --sort=-%cpu | head -n " . ($limit + 1));
         $processes = [];
         
         if ($output) {
-            $lines = explode(\"\\n\", trim($output));
+            $lines = explode("\\n", trim($output));
             array_shift($lines); // Remove header
             
             foreach ($lines as $line) {
@@ -268,24 +268,24 @@ class MonitoringController extends Controller
             return [];
         }
         
-        $output = shell_exec(\"tail -n $lines $logFile 2>/dev/null\");
+        $output = shell_exec("tail -n $lines $logFile 2>/dev/null");
         
         if (!$output) {
             return [];
         }
         
-        return array_reverse(explode(\"\\n\", trim($output)));
+        return array_reverse(explode("\\n", trim($output)));
     }
     
     private function isServiceActive($service)
     {
-        $output = shell_exec(\"systemctl is-active $service 2>&1\");
+        $output = shell_exec("systemctl is-active $service 2>&1");
         return trim($output) === 'active';
     }
     
     private function getServiceUptime($service)
     {
-        $output = shell_exec(\"systemctl show $service --property=ActiveEnterTimestamp 2>&1\");
+        $output = shell_exec("systemctl show $service --property=ActiveEnterTimestamp 2>&1");
         
         if ($output && preg_match('/ActiveEnterTimestamp=(.+)/', $output, $matches)) {
             $startTime = strtotime($matches[1]);
@@ -295,11 +295,11 @@ class MonitoringController extends Controller
                 $hours = floor(($diff % 86400) / 3600);
                 
                 if ($days > 0) {
-                    return \"{$days}d {$hours}h\";
+                    return "{$days}d {$hours}h";
                 } elseif ($hours > 0) {
-                    return \"{$hours}h\";
+                    return "{$hours}h";
                 } else {
-                    return \"<1h\";
+                    return "<1h";
                 }
             }
         }
@@ -315,7 +315,7 @@ class MonitoringController extends Controller
             return '0 MB';
         }
         
-        $output = shell_exec(\"ps -p $pid -o rss= 2>&1\");
+        $output = shell_exec("ps -p $pid -o rss= 2>&1");
         
         if ($output && is_numeric(trim($output))) {
             $kb = (int)trim($output);
@@ -333,7 +333,7 @@ class MonitoringController extends Controller
             return '0%';
         }
         
-        $output = shell_exec(\"ps -p $pid -o %cpu= 2>&1\");
+        $output = shell_exec("ps -p $pid -o %cpu= 2>&1");
         
         if ($output && is_numeric(trim($output))) {
             return trim($output) . '%';
@@ -344,7 +344,7 @@ class MonitoringController extends Controller
     
     private function getServicePID($service)
     {
-        $output = shell_exec(\"systemctl show $service --property=MainPID 2>&1\");
+        $output = shell_exec("systemctl show $service --property=MainPID 2>&1");
         
         if ($output && preg_match('/MainPID=(\\d+)/', $output, $matches)) {
             return (int)$matches[1];
