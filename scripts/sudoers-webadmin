@@ -1,0 +1,28 @@
+# Sudoers configuration for Web Admin Panel
+# File: /etc/sudoers.d/webadmin
+# 
+# This allows www-data user to execute specific administrative scripts
+# with root privileges in a secure and controlled manner.
+
+# Disable requiretty for www-data (needed for PHP execution)
+Defaults:www-data !requiretty
+
+# Allow www-data to execute wrapper scripts without password
+www-data ALL=(root) NOPASSWD: /opt/webserver/scripts/wrappers/service-control.sh
+www-data ALL=(root) NOPASSWD: /opt/webserver/scripts/wrappers/nginx-test.sh
+www-data ALL=(root) NOPASSWD: /opt/webserver/scripts/wrappers/create-backup.sh
+www-data ALL=(root) NOPASSWD: /opt/webserver/scripts/wrappers/restore-backup.sh
+www-data ALL=(root) NOPASSWD: /opt/webserver/scripts/wrappers/site-toggle.sh
+
+# Allow www-data to read system information
+www-data ALL=(root) NOPASSWD: /usr/bin/systemctl status *
+www-data ALL=(root) NOPASSWD: /usr/bin/systemctl is-active *
+www-data ALL=(root) NOPASSWD: /usr/bin/systemctl is-enabled *
+www-data ALL=(root) NOPASSWD: /usr/bin/du -sh *
+www-data ALL=(root) NOPASSWD: /usr/bin/df -h
+www-data ALL=(root) NOPASSWD: /usr/sbin/nginx -t
+
+# System monitoring commands
+www-data ALL=(root) NOPASSWD: /usr/bin/tail -n * /var/log/*
+www-data ALL=(root) NOPASSWD: /usr/bin/grep * /var/log/*
+www-data ALL=(root) NOPASSWD: /bin/journalctl *
