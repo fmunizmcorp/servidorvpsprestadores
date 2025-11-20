@@ -1,0 +1,301 @@
+================================================================================
+CREDENCIAIS E COMANDOS - COPIAR E COLAR
+================================================================================
+
+SERVIDOR PRODUÇÃO VPS
+================================================================================
+IP: 72.61.53.222
+Usuário: root
+Senha: Jm@D@KDPnw7Q
+
+Comando SSH:
+ssh root@72.61.53.222
+
+
+MYSQL DATABASE
+================================================================================
+Host: localhost (no servidor)
+Usuário: root
+Senha: Jm@D@KDPnw7Q
+Database: admin_panel
+
+Comando:
+mysql -u root -p'Jm@D@KDPnw7Q' admin_panel
+
+
+LARAVEL ADMIN PANEL
+================================================================================
+URL: https://72.61.53.222/admin
+Usuário: admin@example.com
+Senha: Admin@123
+
+
+GITHUB REPOSITORY
+================================================================================
+Repository: servidorvpsprestadores
+Owner: fmunizmcorp
+URL: https://github.com/fmunizmcorp/servidorvpsprestadores.git
+Branch Dev: genspark_ai_developer
+Branch Main: main
+PR #1: https://github.com/fmunizmcorp/servidorvpsprestadores/pull/1
+
+
+DIRETÓRIOS IMPORTANTES
+================================================================================
+Produção Laravel: /opt/webserver/admin-panel
+Script Principal: /root/create-site.sh
+Scripts Runtime: /tmp/create-site-wrapper.sh, /tmp/post_site_creation.sh
+NGINX Configs: /etc/nginx/sites-available/
+Sites WWW: /var/www/
+Logs Criação: /tmp/site-creation-*.log
+Logs Laravel: /opt/webserver/admin-panel/storage/logs/laravel.log
+
+
+COMANDOS VERIFICAÇÃO RÁPIDA
+================================================================================
+
+1. Verificar código em produção (linha crítica):
+ssh root@72.61.53.222 "grep -n 'postScript' /opt/webserver/admin-panel/app/Http/Controllers/SitesController.php | head -10"
+
+2. Verificar banco de dados:
+ssh root@72.61.53.222 "mysql -u root -p'Jm@D@KDPnw7Q' admin_panel -e 'SELECT id, site_name, status, ssl_enabled, created_at FROM sites ORDER BY id DESC LIMIT 10;'"
+
+3. Verificar git log produção:
+ssh root@72.61.53.222 "cd /opt/webserver/admin-panel && git log --oneline -5"
+
+4. Verificar arquivos sites:
+ssh root@72.61.53.222 "ls -la /var/www/ | grep sprint"
+
+5. Verificar configs NGINX:
+ssh root@72.61.53.222 "ls -la /etc/nginx/sites-available/ | grep sprint"
+
+6. Verificar logs criação:
+ssh root@72.61.53.222 "ls -la /tmp/site-creation-*.log | tail -5"
+
+7. Ver último log:
+ssh root@72.61.53.222 "tail -50 /tmp/site-creation-sprint31final1763516724.log"
+
+8. Ver logs Laravel:
+ssh root@72.61.53.222 "tail -100 /opt/webserver/admin-panel/storage/logs/laravel.log"
+
+9. Status serviços:
+ssh root@72.61.53.222 "systemctl status nginx && systemctl status php8.3-fpm && systemctl status mysql"
+
+
+TESTE CRIAR SITE AO VIVO
+================================================================================
+
+Via Web Interface:
+1. Acessar: https://72.61.53.222/admin
+2. Login: admin@example.com / Admin@123
+3. Sites → Create New
+4. Preencher: site_name = testefinal{timestamp}, domain_name = testefinal{timestamp}.com
+5. Submit
+6. Aguardar 30 segundos
+7. Verificar listagem
+
+Via CLI:
+ssh root@72.61.53.222
+cd /opt/webserver/admin-panel
+php artisan tinker
+
+$ts = time();
+$site = new App\Models\Site(['site_name' => 'clitest' . $ts, 'domain_name' => 'clitest' . $ts . '.com', 'description' => 'Teste CLI', 'status' => 'inactive', 'ssl_enabled' => false]);
+$site->save();
+echo "Site ID: " . $site->id . "\n";
+exit
+
+# Executar bash
+sudo /root/create-site.sh "clitest${ts}" "clitest${ts}.com" "Teste"
+
+# Executar post-script
+/opt/webserver/admin-panel/storage/app/post_site_creation.sh "clitest${ts}"
+
+# Verificar
+mysql -u root -p'Jm@D@KDPnw7Q' admin_panel -e "SELECT * FROM sites WHERE site_name LIKE 'clitest%';"
+
+
+DEPLOY MANUAL PARA PRODUÇÃO
+================================================================================
+
+No servidor:
+ssh root@72.61.53.222
+cd /opt/webserver/admin-panel
+git fetch origin genspark_ai_developer
+git checkout genspark_ai_developer
+git pull origin genspark_ai_developer
+composer install --no-dev --optimize-autoloader
+php artisan config:cache
+php artisan route:cache
+php artisan view:cache
+chown -R www-data:www-data /opt/webserver/admin-panel
+chmod -R 755 /opt/webserver/admin-panel/storage
+chmod -R 755 /opt/webserver/admin-panel/bootstrap/cache
+systemctl restart php8.3-fpm
+systemctl reload nginx
+
+
+GIT WORKFLOW COMPLETO
+================================================================================
+
+No ambiente local:
+cd /home/user/webapp
+git status
+git add .
+git commit -m "fix(sprint-X): descrição da correção"
+git fetch origin main
+git rebase origin/main
+# Resolver conflitos se houver
+git reset --soft origin/main
+git commit -m "fix(sprint-X): descrição completa de todas mudanças"
+git push -f origin genspark_ai_developer
+
+Atualizar PR:
+gh pr edit 1 --title "Título" --body "Descrição completa"
+gh pr view 1 --json url --jq '.url'
+
+
+QUERIES SQL ÚTEIS
+================================================================================
+
+Listar todos os sites:
+SELECT id, site_name, status, ssl_enabled, created_at FROM sites ORDER BY created_at DESC;
+
+Contar sites por status:
+SELECT status, COUNT(*) as total FROM sites GROUP BY status;
+
+Sites ativos com SSL:
+SELECT COUNT(*) as total FROM sites WHERE status='active' AND ssl_enabled=1;
+
+Último site criado:
+SELECT * FROM sites ORDER BY created_at DESC LIMIT 1;
+
+Deletar sites de teste:
+DELETE FROM sites WHERE site_name LIKE 'sprint%' OR site_name LIKE 'test%' OR site_name LIKE 'cli%';
+
+
+VERIFICAR PERMISSÕES
+================================================================================
+ssh root@72.61.53.222 "ls -la /opt/webserver/admin-panel/storage/app/*.sh"
+ssh root@72.61.53.222 "ls -la /root/create-site.sh"
+ssh root@72.61.53.222 "ls -la /tmp/*.sh"
+
+
+LIMPAR SITES DE TESTE (SE NECESSÁRIO)
+================================================================================
+ssh root@72.61.53.222
+
+# Banco de dados
+mysql -u root -p'Jm@D@KDPnw7Q' admin_panel -e "DELETE FROM sites WHERE site_name LIKE 'sprint%' OR site_name LIKE 'test%' OR site_name LIKE 'cli%';"
+
+# Arquivos
+rm -rf /var/www/sprint*
+rm -rf /var/www/test*
+rm -rf /var/www/cli*
+
+# NGINX configs
+rm /etc/nginx/sites-available/sprint*.conf
+rm /etc/nginx/sites-available/test*.conf
+rm /etc/nginx/sites-enabled/sprint*.conf
+rm /etc/nginx/sites-enabled/test*.conf
+systemctl reload nginx
+
+# Logs
+rm /tmp/site-creation-*.log
+
+
+ARQUIVO CRÍTICO - SitesController.php LINHA 121
+================================================================================
+
+ERRADO (Sprint 29 - com sudo):
+$command = "(nohup sudo " . $wrapper . " " . implode(" ", $args) . " && sudo " . $postScript . " " . escapeshellarg($siteName) . ") > /tmp/site-creation-{$siteName}.log 2>&1 & echo \$!";
+
+CORRETO (Sprint 30 - sem sudo no post_site_creation):
+$command = "(nohup sudo " . $wrapper . " " . implode(" ", $args) . " && " . $postScript . " " . escapeshellarg($siteName) . ") > /tmp/site-creation-{$siteName}.log 2>&1 & echo \$!";
+
+Verificar em produção:
+ssh root@72.61.53.222 "grep -A2 -B2 'postScript.*escapeshellarg' /opt/webserver/admin-panel/app/Http/Controllers/SitesController.php"
+
+
+POST_SITE_CREATION.SH CORRETO
+================================================================================
+#!/bin/bash
+SITE_NAME="$1"
+
+if [ -z "$SITE_NAME" ]; then
+    echo "Error: Site name required"
+    exit 1
+fi
+
+sleep 3
+
+mysql -u root -p'Jm@D@KDPnw7Q' admin_panel << SQL
+UPDATE sites SET status='active', ssl_enabled=1 WHERE site_name='$SITE_NAME';
+SQL
+
+echo "Site $SITE_NAME status updated to active"
+
+
+ARQUIVO .ENV PRODUÇÃO
+================================================================================
+Path: /opt/webserver/admin-panel/.env
+
+Configurações críticas:
+SESSION_PATH=/admin
+SESSION_SECURE_COOKIE=true
+SESSION_DOMAIN=null
+APP_ENV=production
+APP_DEBUG=false
+DB_DATABASE=admin_panel
+DB_USERNAME=root
+DB_PASSWORD=Jm@D@KDPnw7Q
+
+
+ESTRUTURA BANCO DE DADOS - TABELA SITES
+================================================================================
+CREATE TABLE `sites` (
+  `id` bigint unsigned NOT NULL AUTO_INCREMENT,
+  `site_name` varchar(255) NOT NULL,
+  `domain_name` varchar(255) NOT NULL,
+  `description` text,
+  `status` enum('active','inactive','suspended') NOT NULL DEFAULT 'inactive',
+  `ssl_enabled` tinyint(1) NOT NULL DEFAULT '0',
+  `created_at` timestamp NULL DEFAULT NULL,
+  `updated_at` timestamp NULL DEFAULT NULL,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `sites_site_name_unique` (`site_name`),
+  UNIQUE KEY `sites_domain_name_unique` (`domain_name`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+
+FLUXO CRIAÇÃO DE SITE (ARQUITETURA)
+================================================================================
+1. User submete formulário (create.blade.php)
+2. SitesController@store valida input
+3. Cria registro DB com status='inactive', ssl_enabled=0
+4. Copia scripts para /tmp/
+5. Executa comando assíncrono:
+   (nohup sudo /tmp/create-site-wrapper.sh {args} && /tmp/post_site_creation.sh {site}) > log 2>&1 &
+6. Retorna redirect imediato
+7. Background:
+   - create-site-wrapper.sh → cria NGINX, SSL, etc
+   - post_site_creation.sh → atualiza DB para active, ssl=1
+
+
+COMMIT SHA IMPORTANTE
+================================================================================
+Sprint 30-31 Squashed: 5c71f52
+Arquivos alterados: 121
+Inserções: 22,872
+
+
+PRÓXIMA AÇÃO IMEDIATA
+================================================================================
+ssh root@72.61.53.222 "grep -n 'postScript' /opt/webserver/admin-panel/app/Http/Controllers/SitesController.php | grep -v Binary | head -5"
+
+Se resultado contém 'sudo': Deploy NÃO foi feito
+Se resultado NÃO contém 'sudo': Deploy OK
+
+
+FIM
+================================================================================

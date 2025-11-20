@@ -7,7 +7,7 @@ use Illuminate\Support\Facades\Validator;
 
 class EmailController extends Controller
 {
-    private $scriptsPath = '/opt/webserver/scripts';
+    private $scriptsPath = '/tmp';
     private $postfixPath = '/etc/postfix';
     
     /**
@@ -57,7 +57,7 @@ class EmailController extends Controller
                 throw new \Exception("Script create-email-domain.sh not found");
             }
             
-            $command = "sudo bash $script $domain 2>&1";
+            $command = "bash $script $domain 2>&1";
             $output = shell_exec($command);
             
             return redirect()->route('email.domains')
@@ -132,7 +132,7 @@ class EmailController extends Controller
             }
             
             // Script expects: domain username password quota
-            $command = "sudo bash $script " . escapeshellarg($domain) . " " . 
+            $command = "bash $script " . escapeshellarg($domain) . " " . 
                        escapeshellarg($username) . " " . 
                        escapeshellarg($password) . " " . 
                        escapeshellarg($quota) . " 2>&1";

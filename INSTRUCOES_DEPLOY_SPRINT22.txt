@@ -1,0 +1,64 @@
+========================================
+INSTRUÇÕES DE DEPLOY - SPRINT 22
+========================================
+
+PROBLEMA CRÍTICO IDENTIFICADO:
+As correções do Sprint 21 NÃO foram deployadas no VPS.
+O código está correto no GitHub, mas não foi aplicado no servidor.
+
+========================================
+MÉTODO 1: DEPLOY VIA SCRIPT AUTOMÁTICO
+========================================
+
+1. Copie o arquivo DEPLOY_COMPLETO_SPRINT22.sh para o VPS:
+
+   scp DEPLOY_COMPLETO_SPRINT22.sh root@72.61.53.222:/root/
+
+2. Execute no VPS:
+
+   ssh root@72.61.53.222
+   bash /root/DEPLOY_COMPLETO_SPRINT22.sh
+
+========================================
+MÉTODO 2: DEPLOY MANUAL
+========================================
+
+1. Acesse o VPS:
+   ssh root@72.61.53.222
+
+2. Edite o EmailController.php:
+   nano /opt/webserver/admin-panel/app/Http/Controllers/EmailController.php
+
+   LINHA 60: Adicione "sudo" antes de "bash"
+   LINHA 135: Adicione "sudo" antes de "bash"
+
+3. Configure permissões sudo:
+   cat > /etc/sudoers.d/webserver-scripts << 'EOF'
+   www-data ALL=(ALL) NOPASSWD: /opt/webserver/scripts/create-email-domain.sh
+   www-data ALL=(ALL) NOPASSWD: /opt/webserver/scripts/create-email.sh
+   www-data ALL=(ALL) NOPASSWD: /opt/webserver/scripts/wrappers/create-site-wrapper.sh
+   EOF
+
+   chmod 440 /etc/sudoers.d/webserver-scripts
+
+4. Limpe o cache Laravel:
+   cd /opt/webserver/admin-panel
+   php artisan config:clear
+   php artisan cache:clear
+
+5. Teste os formulários:
+   - Email Domain: http://72.61.53.222/admin/email/domains
+   - Email Account: http://72.61.53.222/admin/email/accounts
+   - Site Creation: http://72.61.53.222/admin/sites/create
+
+========================================
+ARQUIVOS DISPONÍVEIS
+========================================
+
+- DEPLOY_COMPLETO_SPRINT22.sh (script automatizado)
+- EmailController.php.PARA_DEPLOY (arquivo corrigido completo)
+- INSTRUCOES_DEPLOY_SPRINT22.txt (este arquivo)
+
+========================================
+FIM DAS INSTRUÇÕES
+========================================

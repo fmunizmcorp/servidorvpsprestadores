@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\Site;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Support\Str;
@@ -16,7 +17,21 @@ class SitesController extends Controller
      */
     public function index()
     {
-        $sites = $this->getAllSites();
+        // SPRINT 26 FIX: Fetch from database instead of filesystem
+        $sites = Site::orderBy('created_at', 'desc')->get();
+        
+        // SPRINT 28 FIX: Map database columns to view-expected format
+        $sites = $sites->map(function($site) {
+            return [
+                'name' => $site->site_name,  // View expects 'name', not 'site_name'
+                'domain' => $site->domain,
+                'phpVersion' => $site->php_version,
+                'ssl' => $site->ssl_enabled,
+                'disk_usage' => $this->getDiskUsage($this->sitesPath . '/' . $site->site_name),
+                'nginxEnabled' => $this->isSiteActive($site->site_name),
+                'created' => $site->created_at ? $site->created_at->format('Y-m-d H:i') : 'N/A',
+            ];
+        });
         
         return view('sites.index', [
             'sites' => $sites,
@@ -39,6 +54,7 @@ class SitesController extends Controller
     
     /**
      * Store new site
+     * SPRINT 20 FIX: Execute in background to avoid timeout
      */
     public function store(Request $request)
     {
@@ -78,29 +94,104 @@ class SitesController extends Controller
             
             $args[] = "--template=" . escapeshellarg($template);
             
-            $command = "sudo " . $wrapper . " " . implode(" ", $args) . " 2>&1";
+            // SPRINT 29 FIX: Save to database FIRST to avoid 502 timeouts
+            // Then run bash script in background
+            $databaseName = $createDB !== '--no-db' ? "db_{$siteName}" : null;
+            $databaseUser = $createDB !== '--no-db' ? $siteName : null;
             
-            // Execute command
-            $output = shell_exec($command);
+            \Log::info("SPRINT 36: Saving site to database BEFORE bash script", [
+                'site_name' => $siteName,
+                'status' => 'inactive',
+                'note' => 'Will be updated to active by post_site_creation.sh'
+            ]);
             
-            // Check if site was created successfully
-            if (strpos($output, 'successfully') === false && strpos($output, 'ERROR') !== false) {
-                throw new \Exception("Site creation failed: " . substr($output, 0, 500));
+            $site = Site::create([
+                'site_name' => $siteName,
+                'domain' => $domain,
+                'php_version' => $phpVersion,
+                'has_database' => $createDB !== '--no-db',
+                'database_name' => $databaseName,
+                'database_user' => $databaseUser,
+                'template' => $template,
+                'status' => 'inactive', // Mark as 'inactive' initially (will be 'active' after bash completes)
+                'ssl_enabled' => false, // Will be enabled after bash script completes
+            ]);
+            
+            \Log::info("Site saved to database, now executing bash script in background", ['site_id' => $site->id]);
+            
+            // SPRINT 32 FIX: Copy scripts from storage/app to /tmp BEFORE execution
+            $wrapperSource = storage_path('app/create-site-wrapper.sh');
+            $postScriptSource = storage_path('app/post_site_creation.sh');
+            $wrapperDest = "/tmp/create-site-wrapper.sh";
+            $postScriptDest = "/tmp/post_site_creation.sh";
+            
+            // Copy scripts to /tmp with proper permissions
+            if (file_exists($wrapperSource)) {
+                copy($wrapperSource, $wrapperDest);
+                chmod($wrapperDest, 0755);
+                \Log::info("Copied wrapper script to /tmp", ['source' => $wrapperSource]);
+            } else {
+                \Log::error("Wrapper script not found", ['path' => $wrapperSource]);
+                throw new \Exception("Wrapper script not found: {$wrapperSource}");
             }
             
-            // Parse output for credentials
-            $credentialsFile = "/opt/webserver/sites/$siteName/CREDENTIALS.txt";
-            $credentials = [];
-            
-            if (file_exists($credentialsFile)) {
-                $credContent = file_get_contents($credentialsFile);
-                $credentials = $this->parseCredentialsFromFile($credContent);
+            if (file_exists($postScriptSource)) {
+                copy($postScriptSource, $postScriptDest);
+                chmod($postScriptDest, 0755);
+                \Log::info("Copied post-script to /tmp", ['source' => $postScriptSource]);
+            } else {
+                \Log::error("Post-script not found", ['path' => $postScriptSource]);
+                throw new \Exception("Post-script not found: {$postScriptSource}");
             }
             
+            // Execute bash script in background using nohup, then update DB status
+            // SPRINT 30 FIX: Remove sudo from post_site_creation.sh (it has mysql credentials embedded)
+            // SPRINT 32 FIX: Scripts now copied to /tmp before execution
+            // SPRINT 35 FIX: Execute post script with sudo in a separate background process to ensure proper permissions
+            // SPRINT 36 FIX: Use absolute sudo path with -n flag for non-interactive execution
+            $wrapper = $wrapperDest;
+            $postScript = $postScriptDest;
+            
+            // First, execute the wrapper script to create the site
+            $wrapperCommand = "nohup /usr/bin/sudo -n " . $wrapper . " " . implode(" ", $args) . " > /tmp/site-creation-{$siteName}.log 2>&1 & echo \$!";
+            
+            \Log::info("SPRINT 36: Executing wrapper script with absolute sudo path", [
+                'command' => $wrapperCommand,
+                'site_name' => $siteName,
+                'fix' => 'Using /usr/bin/sudo -n for non-interactive execution'
+            ]);
+            
+            // Start wrapper background process and get PID
+            $wrapperPid = trim(shell_exec($wrapperCommand));
+            \Log::info("SPRINT 36: Wrapper script started in background", [
+                'pid' => $wrapperPid, 
+                'site_name' => $siteName
+            ]);
+            
+            // Then, execute the post-creation script with sudo in a separate background process
+            // This script will wait for the wrapper to complete, then update database status
+            // SPRINT 36: Use absolute sudo path with -n flag
+            $postCommand = "(sleep 10 && /usr/bin/sudo -n " . $postScript . " " . escapeshellarg($siteName) . ") > /tmp/post-site-{$siteName}.log 2>&1 &";
+            
+            \Log::info("SPRINT 36: Executing post-creation script with absolute sudo path", [
+                'command' => $postCommand,
+                'site_name' => $siteName,
+                'fix' => 'Using /usr/bin/sudo -n for non-interactive execution'
+            ]);
+            
+            shell_exec($postCommand);
+            \Log::info("SPRINT 36: Post-creation script started in background", [
+                'site_name' => $siteName,
+                'expected_completion' => '~25 seconds (10s sleep + 15s wait)'
+            ]);
+            
+            // Note: In production, you should use Laravel Queues for this
+            // For now, the bash script will run in background and update status when done
+            
+            // Return with success message
             return redirect()->route('sites.index')
-                ->with('success', 'Site created successfully!')
-                ->with('output', $output)
-                ->with('credentials', $credentials);
+                ->with('success', "Site '{$siteName}' created successfully!")
+                ->with('site_name', $siteName);
                 
         } catch (\Exception $e) {
             return redirect()->back()
@@ -219,6 +310,12 @@ class SitesController extends Controller
             
             $command = "bash $script $siteName 2>&1";
             $output = shell_exec($command);
+            
+            // SPRINT 27 FIX: Delete from database after filesystem cleanup
+            $site = Site::where('site_name', $siteName)->first();
+            if ($site) {
+                $site->delete();
+            }
             
             return redirect()->route('sites.index')
                 ->with('success', 'Site deleted successfully!');

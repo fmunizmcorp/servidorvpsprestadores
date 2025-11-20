@@ -2,12 +2,14 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\EmailDomain;
+use App\Models\EmailAccount;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Validator;
 
 class EmailController extends Controller
 {
-    private $scriptsPath = '/opt/webserver/scripts';
+    private $scriptsPath = '/tmp';
     private $postfixPath = '/etc/postfix';
     
     /**
@@ -27,7 +29,23 @@ class EmailController extends Controller
      */
     public function domains()
     {
-        $domains = $this->getAllDomains();
+        // SPRINT 26 FIX: Fetch from database instead of filesystem
+        $domains = EmailDomain::withCount('emailAccounts')
+            ->orderBy('created_at', 'desc')
+            ->get();
+        
+        // Enrich with filesystem data
+        $domains = $domains->map(function($domain) {
+            return [
+                'id' => $domain->id,
+                'name' => $domain->domain,
+                'accountCount' => $domain->email_accounts_count,
+                'diskUsage' => $this->getDomainDiskUsage($domain->domain),
+                'dnsStatus' => $this->checkDomainDNS($domain->domain),
+                'status' => $domain->status,
+                'created_at' => $domain->created_at,
+            ];
+        })->toArray();
         
         return view('email.domains', [
             'domains' => $domains
@@ -57,8 +75,25 @@ class EmailController extends Controller
                 throw new \Exception("Script create-email-domain.sh not found");
             }
             
-            $command = "sudo bash $script $domain 2>&1";
+            $command = "bash $script $domain 2>&1";
             $output = shell_exec($command);
+            
+            // SPRINT 26 FIX: Save to database after successful creation
+            // Parse DKIM key from output if present
+            $dkimPublicKey = null;
+            if (preg_match('/p=([A-Za-z0-9+\/=]+)/', $output, $matches)) {
+                $dkimPublicKey = $matches[1];
+            }
+            
+            EmailDomain::create([
+                'domain' => $domain,
+                'status' => 'active',
+                'dkim_selector' => 'mail',
+                'dkim_public_key' => $dkimPublicKey,
+                'mx_record' => "mail.{$domain}",
+                'spf_record' => "v=spf1 mx a ip4:72.61.53.222 ~all",
+                'dmarc_record' => "v=DMARC1; p=quarantine; rua=mailto:dmarc@{$domain}",
+            ]);
             
             return redirect()->route('email.domains')
                 ->with('success', "Email domain $domain created successfully!")
@@ -77,20 +112,46 @@ class EmailController extends Controller
     public function accounts(Request $request)
     {
         $domain = $request->get('domain');
-        $allDomains = $this->getAllDomains();
         
-        // Extract just domain names for the accounts view dropdown
-        $domainNames = array_map(function($d) {
-            return $d['name'];
-        }, $allDomains);
+        // SPRINT 26 FIX: Fetch domains from database
+        $domainNames = EmailDomain::pluck('domain')->toArray();
         
         if (!$domain && !empty($domainNames)) {
             $domain = $domainNames[0];
         }
         
+        // SPRINT 26 FIX: Fetch accounts from database
         $accounts = [];
         if ($domain) {
-            $accounts = $this->getAccountsForDomain($domain);
+            $accounts = EmailAccount::where('domain', $domain)
+                ->orderBy('created_at', 'desc')
+                ->get()
+                ->map(function($account) {
+                    $mailPath = "/opt/webserver/mail/mailboxes/{$account->domain}/{$account->username}";
+                    $diskUsageBytes = 0;
+                    $diskUsageStr = '0 MB';
+                    
+                    if (is_dir($mailPath)) {
+                        $duOutput = shell_exec("du -sb " . escapeshellarg($mailPath) . " 2>/dev/null");
+                        if ($duOutput) {
+                            $diskUsageBytes = (int)trim(explode("\t", $duOutput)[0]);
+                            $diskUsageMB = round($diskUsageBytes / 1024 / 1024, 2);
+                            $diskUsageStr = $diskUsageMB . ' MB';
+                        }
+                    }
+                    
+                    $usagePercent = $account->quota_mb > 0 ? min(100, round(($diskUsageBytes / 1024 / 1024 / $account->quota_mb) * 100, 1)) : 0;
+                    
+                    return [
+                        'email' => $account->email,
+                        'username' => $account->username,
+                        'quota' => $account->quota_mb . ' MB',
+                        'used' => $diskUsageStr,
+                        'percent' => $usagePercent,
+                        'status' => $account->status,
+                        'created_at' => $account->created_at,
+                    ];
+                })->toArray();
         }
         
         return view('email.accounts', [
@@ -132,11 +193,21 @@ class EmailController extends Controller
             }
             
             // Script expects: domain username password quota
-            $command = "sudo bash $script " . escapeshellarg($domain) . " " . 
+            $command = "bash $script " . escapeshellarg($domain) . " " . 
                        escapeshellarg($username) . " " . 
                        escapeshellarg($password) . " " . 
                        escapeshellarg($quota) . " 2>&1";
             $output = shell_exec($command);
+            
+            // SPRINT 26 FIX: Save to database after successful creation
+            EmailAccount::create([
+                'email' => $email,
+                'domain' => $domain,
+                'username' => $username,
+                'quota_mb' => $quota,
+                'used_mb' => 0,
+                'status' => 'active',
+            ]);
             
             return redirect()->route('email.accounts', ['domain' => $domain])
                 ->with('success', "Email account $email created successfully!");

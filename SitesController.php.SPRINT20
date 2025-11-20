@@ -12,6 +12,68 @@ class SitesController extends Controller
     private $scriptsPath = '/opt/webserver/scripts';
     
     /**
+     * Store new site
+     * SPRINT 20 FIX: Execute script in background to avoid timeout
+     */
+    public function store(Request $request)
+    {
+        $validator = Validator::make($request->all(), [
+            'site_name' => 'required|alpha_dash|max:50',
+            'domain' => 'required|regex:/^[a-z0-9\.\-]+$/|max:255',
+            'php_version' => 'required|in:8.3',
+            'create_database' => 'boolean'
+        ]);
+        
+        if ($validator->fails()) {
+            return redirect()->back()
+                ->withErrors($validator)
+                ->withInput();
+        }
+        
+        try {
+            // Prepare arguments
+            $siteName = $request->site_name;
+            $domain = $request->domain;
+            $phpVersion = $request->php_version;
+            $createDB = $request->has('create_database') && $request->create_database ? '' : '--no-db';
+            $template = $request->input('template', 'php');
+            
+            // Build command with wrapper
+            $wrapper = "/opt/webserver/scripts/wrappers/create-site-wrapper.sh";
+            
+            $args = [
+                escapeshellarg($siteName),
+                escapeshellarg($domain),
+                escapeshellarg($phpVersion),
+            ];
+            
+            if ($createDB) {
+                $args[] = $createDB;
+            }
+            
+            $args[] = "--template=" . escapeshellarg($template);
+            
+            // SPRINT 20 FIX: Execute in background with nohup
+            $logFile = "/opt/webserver/sites/logs/site-creation-{$siteName}.log";
+            $command = "nohup sudo " . $wrapper . " " . implode(" ", $args) . " > " . escapeshellarg($logFile) . " 2>&1 &";
+            
+            // Execute command in background
+            exec($command);
+            
+            // Return immediately with info message
+            return redirect()->route('sites.index')
+                ->with('info', "Site creation started for '{$siteName}'. This process may take 2-3 minutes. Please refresh the page in a moment to see the new site.")
+                ->with('site_name', $siteName)
+                ->with('log_file', $logFile);
+                
+        } catch (\Exception $e) {
+            return redirect()->back()
+                ->with('error', 'Failed to start site creation: ' . $e->getMessage())
+                ->withInput();
+        }
+    }
+    
+    // ... rest of the controller remains unchanged ...
      * Display list of all sites
      */
     public function index()

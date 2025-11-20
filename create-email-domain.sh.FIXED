@@ -1,0 +1,55 @@
+#!/bin/bash
+if [ "$#" -ne 1 ]; then
+    echo "Usage: $0 domain.com"
+    exit 1
+fi
+
+DOMAIN=$1
+echo "Creating email domain: $DOMAIN"
+
+# Adicionar domínio virtual (CORRIGIDO - adiciona OK)
+echo "$DOMAIN OK" >> /etc/postfix/virtual_domains
+postmap /etc/postfix/virtual_domains
+
+# Criar diretório
+mkdir -p /opt/webserver/mail/mailboxes/$DOMAIN
+chown -R vmail:mail /opt/webserver/mail/mailboxes/$DOMAIN
+
+# Gerar chaves DKIM
+mkdir -p /opt/webserver/mail/config/dkim/keys/$DOMAIN
+cd /opt/webserver/mail/config/dkim/keys/$DOMAIN
+opendkim-genkey -t -s mail -d $DOMAIN
+chown -R opendkim:opendkim /opt/webserver/mail/config/dkim/keys/$DOMAIN
+chmod 600 /opt/webserver/mail/config/dkim/keys/$DOMAIN/mail.private
+
+# Configurar OpenDKIM
+echo "mail._domainkey.$DOMAIN $DOMAIN:mail:/opt/webserver/mail/config/dkim/keys/$DOMAIN/mail.private" >> /opt/webserver/mail/config/dkim/KeyTable
+echo "*@$DOMAIN mail._domainkey.$DOMAIN" >> /opt/webserver/mail/config/dkim/SigningTable
+
+# Recarregar
+systemctl reload postfix
+systemctl reload opendkim
+
+# Exibir DNS records
+echo ""
+echo "========================================="
+echo "DNS RECORDS PARA $DOMAIN"
+echo "========================================="
+echo ""
+echo "MX Record:"
+echo "$DOMAIN.    IN    MX    10    mail.$DOMAIN."
+echo ""
+echo "A Record:"
+echo "mail.$DOMAIN.    IN    A    72.61.53.222"
+echo ""
+echo "SPF Record:"
+echo "$DOMAIN.    IN    TXT    \"v=spf1 mx a ip4:72.61.53.222 ~all\""
+echo ""
+echo "DKIM Record:"
+DKIM_PUB=$(grep -v "^-" /opt/webserver/mail/config/dkim/keys/$DOMAIN/mail.txt | tr -d '\n' | tr -d ' ')
+echo "mail._domainkey.$DOMAIN.    IN    TXT    \"$DKIM_PUB\""
+echo ""
+echo "DMARC Record:"
+echo "_dmarc.$DOMAIN.    IN    TXT    \"v=DMARC1; p=quarantine; rua=mailto:dmarc@$DOMAIN\""
+echo ""
+echo "========================================="

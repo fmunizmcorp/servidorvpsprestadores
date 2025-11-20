@@ -1,0 +1,13 @@
+HTTP/2 302 
+server: nginx
+content-type: text/html; charset=utf-8
+location: https://72.61.53.222/admin/email/accounts?domain=sprint20final1763421133.local
+cache-control: no-cache, private
+date: Mon, 17 Nov 2025 23:12:19 GMT
+set-cookie: XSRF-TOKEN=eyJpdiI6ImtOTEFHbW9tTXlzNExXSmwycmZLNmc9PSIsInZhbHVlIjoiTTdMZ2lTaktCRm1YSUVoQ1hvQmNvbDMzc1MwVzhYTERtNGpPOUR4V2IxUTlCOURwblhLc01sSHhxUnU0aCtwdjdwNStkalVxL0RJcVgxUVFCQ0JZc0JzWitUZGxGVmpUcjJKMzE4QzZWMUVnTjkxdXBKRVB5MHlQNkJ1MjB6RTQiLCJtYWMiOiIxM2E4NTc4NDRjOWQ0Nzk1ZjE4MzlmNTEyZDQwNGQyODgxZDAxOTIwNTM3NjAwYmViOGNmZWNkNzM0NDZjMGYxIiwidGFnIjoiIn0%3D; expires=Tue, 18 Nov 2025 01:12:19 GMT; Max-Age=7200; path=/; secure; samesite=lax
+set-cookie: vps-admin-panel-session=eyJpdiI6Im5FZjQxTjBoNWJVUkN0bjNxMGtVSUE9PSIsInZhbHVlIjoiMDZVSXR3Z284YUZrcGRodzJHNE5sMkZLSkxGdDZvaW1JM25FaVl1UGMrNnZEZTMvS3dsQ3hCdmMxUmlrd09oVHRTYjM2clBmWHEwek1GSGpiN0FiUTAwK2llMy9KSWU3Nk12UDBiTHRZcjZhUkJMam9HUVhJSGQzUnF1UDRxWEIiLCJtYWMiOiIxODgzY2Q1MDA2MjAyNzQyYmI5YmVkNzI5MjUzY2M5OGEwYjEzNDM5N2FmYTI3ODMzY2UzYTEyMmZlYjM0N2QyIiwidGFnIjoiIn0%3D; expires=Tue, 18 Nov 2025 01:12:19 GMT; Max-Age=7200; path=/; secure; httponly; samesite=lax
+strict-transport-security: max-age=31536000
+x-frame-options: SAMEORIGIN
+x-content-type-options: nosniff
+x-xss-protection: 1; mode=block
+

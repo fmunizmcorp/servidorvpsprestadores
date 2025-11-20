@@ -14,8 +14,8 @@
 
                         <!-- Site Name -->
                         <div class="mb-4">
-                            <label for="siteName" class="block text-sm font-medium text-gray-700">Site Name</label>
-                            <input type="text" name="siteName" id="siteName" required
+                            <label for="site_name" class="block text-sm font-medium text-gray-700">Site Name</label>
+                            <input type="text" name="site_name" id="site_name" required
                                    class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500"
                                    placeholder="mysite" pattern="[a-z0-9-]+" 
                                    title="Only lowercase letters, numbers, and hyphens">
@@ -33,19 +33,18 @@
 
                         <!-- PHP Version -->
                         <div class="mb-4">
-                            <label for="phpVersion" class="block text-sm font-medium text-gray-700">PHP Version</label>
-                            <select name="phpVersion" id="phpVersion" required
+                            <label for="php_version" class="block text-sm font-medium text-gray-700">PHP Version</label>
+                            <select name="php_version" id="php_version" required
                                     class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500">
-                                <option value="8.3">PHP 8.3</option>
-                                <option value="8.2">PHP 8.2</option>
-                                <option value="8.1">PHP 8.1</option>
+                                <option value="8.3" selected>PHP 8.3</option>
                             </select>
+                            <p class="mt-1 text-sm text-gray-500">Currently only PHP 8.3 is installed on the server.</p>
                         </div>
 
                         <!-- Create Database -->
                         <div class="mb-4">
                             <label class="flex items-center">
-                                <input type="checkbox" name="createDB" id="createDB" checked
+                                <input type="checkbox" name="create_database" id="create_database" value="1" checked
                                        class="rounded border-gray-300 text-indigo-600 shadow-sm focus:border-indigo-500 focus:ring-indigo-500">
                                 <span class="ml-2 text-sm text-gray-700">Create Database</span>
                             </label>

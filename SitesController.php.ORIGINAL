@@ -39,6 +39,7 @@ class SitesController extends Controller
     
     /**
      * Store new site
+     * SPRINT 20 FIX: Execute in background to avoid timeout
      */
     public function store(Request $request)
     {
@@ -78,33 +79,21 @@ class SitesController extends Controller
             
             $args[] = "--template=" . escapeshellarg($template);
             
-            $command = "sudo " . $wrapper . " " . implode(" ", $args) . " 2>&1";
+            // SPRINT 20 FIX: Execute in background with nohup to avoid timeout
+            $logFile = "/opt/webserver/sites/logs/site-creation-{$siteName}.log";
+            $command = "nohup sudo " . $wrapper . " " . implode(" ", $args) . " > " . escapeshellarg($logFile) . " 2>&1 &";
             
-            // Execute command
-            $output = shell_exec($command);
+            // Execute command in background
+            exec($command);
             
-            // Check if site was created successfully
-            if (strpos($output, 'successfully') === false && strpos($output, 'ERROR') !== false) {
-                throw new \Exception("Site creation failed: " . substr($output, 0, 500));
-            }
-            
-            // Parse output for credentials
-            $credentialsFile = "/opt/webserver/sites/$siteName/CREDENTIALS.txt";
-            $credentials = [];
-            
-            if (file_exists($credentialsFile)) {
-                $credContent = file_get_contents($credentialsFile);
-                $credentials = $this->parseCredentialsFromFile($credContent);
-            }
-            
+            // Return immediately with info message
             return redirect()->route('sites.index')
-                ->with('success', 'Site created successfully!')
-                ->with('output', $output)
-                ->with('credentials', $credentials);
+                ->with('info', "Site creation started for '{$siteName}'. This process may take 2-3 minutes. Please refresh the page to see the new site.")
+                ->with('site_name', $siteName);
                 
         } catch (\Exception $e) {
             return redirect()->back()
-                ->with('error', 'Failed to create site: ' . $e->getMessage())
+                ->with('error', 'Failed to start site creation: ' . $e->getMessage())
                 ->withInput();
         }
     }

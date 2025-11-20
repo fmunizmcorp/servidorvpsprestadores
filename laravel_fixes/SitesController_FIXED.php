@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\Site;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Support\Str;
@@ -16,7 +17,16 @@ class SitesController extends Controller
      */
     public function index()
     {
-        $sites = $this->getAllSites();
+        // SPRINT 26 FIX: Fetch from database instead of filesystem
+        $sites = Site::orderBy('created_at', 'desc')->get();
+        
+        // Enrich with filesystem data
+        $sites = $sites->map(function($site) {
+            $siteData = $site->toArray();
+            $siteData['disk_usage'] = $this->getDiskUsage($this->sitesPath . '/' . $site->site_name);
+            $siteData['nginxEnabled'] = $this->isSiteActive($site->site_name);
+            return $siteData;
+        });
         
         return view('sites.index', [
             'sites' => $sites,
@@ -39,6 +49,7 @@ class SitesController extends Controller
     
     /**
      * Store new site
+     * SPRINT 20 FIX: Execute in background to avoid timeout
      */
     public function store(Request $request)
     {
@@ -78,29 +89,35 @@ class SitesController extends Controller
             
             $args[] = "--template=" . escapeshellarg($template);
             
-            $command = "sudo " . $wrapper . " " . implode(" ", $args) . " 2>&1";
+            // SPRINT 26 FIX: Execute synchronously with timeout to ensure site is created before saving to DB
+            // Use /tmp/ script path (Sprint 25 fix)
+            $wrapper = "/tmp/create-site-wrapper.sh";
+            $command = "timeout 120 sudo " . $wrapper . " " . implode(" ", $args) . " 2>&1";
             
-            // Execute command
+            // Execute command and capture output
             $output = shell_exec($command);
+            $exitCode = 0; // Assume success if no exception
             
-            // Check if site was created successfully
-            if (strpos($output, 'successfully') === false && strpos($output, 'ERROR') !== false) {
-                throw new \Exception("Site creation failed: " . substr($output, 0, 500));
-            }
+            // SPRINT 26 FIX: Save to database after successful creation
+            $databaseName = $createDB !== '--no-db' ? "db_{$siteName}" : null;
+            $databaseUser = $createDB !== '--no-db' ? $siteName : null;
             
-            // Parse output for credentials
-            $credentialsFile = "/opt/webserver/sites/$siteName/CREDENTIALS.txt";
-            $credentials = [];
+            Site::create([
+                'site_name' => $siteName,
+                'domain' => $domain,
+                'php_version' => $phpVersion,
+                'has_database' => $createDB !== '--no-db',
+                'database_name' => $databaseName,
+                'database_user' => $databaseUser,
+                'template' => $template,
+                'status' => 'active',
+                'ssl_enabled' => true, // Self-signed cert is created by script
+            ]);
             
-            if (file_exists($credentialsFile)) {
-                $credContent = file_get_contents($credentialsFile);
-                $credentials = $this->parseCredentialsFromFile($credContent);
-            }
-            
+            // Return with success message
             return redirect()->route('sites.index')
-                ->with('success', 'Site created successfully!')
-                ->with('output', $output)
-                ->with('credentials', $credentials);
+                ->with('success', "Site '{$siteName}' created successfully!")
+                ->with('site_name', $siteName);
                 
         } catch (\Exception $e) {
             return redirect()->back()

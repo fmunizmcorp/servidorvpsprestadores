@@ -1,0 +1,13 @@
+HTTP/2 302 
+server: nginx
+content-type: text/html; charset=utf-8
+location: https://72.61.53.222/admin/login
+cache-control: no-cache, private
+date: Mon, 17 Nov 2025 18:15:39 GMT
+set-cookie: XSRF-TOKEN=eyJpdiI6InVmWlYrWGV3L2J2M091blFwZjBhbnc9PSIsInZhbHVlIjoiRTdWZk1GUkw1Q0JLY0tHa1RpQVBzQWttMVY4Q3dBdnZNNjcvV3c2eXZOVlVOMnZseS9lQlJCNEtzTHNoSk9RU2NuTWdkZmEveGgyZWNlR0xLOWdmUThlOXlMZXdEYTZ5V2ZCNjd1MWpKUkVnY0JrTktpOXFqb2dDRkhCU25xdE0iLCJtYWMiOiJmNDNkYTQ2ZWU3NzRiNTIxYWNkYmU4YTgwNWI1OWZlNWM0Yzg4NTM2NTZkMDhmM2RmMTQzNDE2NmE4Y2IxMzQwIiwidGFnIjoiIn0%3D; expires=Mon, 17 Nov 2025 20:15:39 GMT; Max-Age=7200; path=/; secure; samesite=lax
+set-cookie: vps-admin-panel-session=eyJpdiI6IlJtNjZoOVh1N2tWcGFWNkxBNHVJL0E9PSIsInZhbHVlIjoiZElocnliai9NTjczQXlscHhDYVY1MWx2MjdOQ0k5aS9iTVQ4dDlkaWJzc1JmemFoQU5VSGNZekRnUTlpU2VCZk83S01iNThRUVJTbGhoNVpxQ0NJNzdxN3lLa2tvVGU0WjM1R3dHMk03clhlajB5dVEvRldEdE5IM0NsdVFMdUkiLCJtYWMiOiI1ZjU0NTRmNTY0ZmVkZDM4MjRiMTlhZDgyYWY1YWNkZDU5MTZmNDA2YjMzMDA5MzYyMDQ1ZWJjMzZhZjkxZGRlIiwidGFnIjoiIn0%3D; expires=Mon, 17 Nov 2025 20:15:39 GMT; Max-Age=7200; path=/; secure; httponly; samesite=lax
+strict-transport-security: max-age=31536000
+x-frame-options: SAMEORIGIN
+x-content-type-options: nosniff
+x-xss-protection: 1; mode=block
+
