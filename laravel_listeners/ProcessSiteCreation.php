@@ -22,16 +22,24 @@ class ProcessSiteCreation
         ]);
 
         try {
-            // Copy scripts to /tmp
+            // Copy scripts to /tmp with unique names per site to avoid permission conflicts
             $wrapperSource = storage_path('app/create-site-wrapper.sh');
             $postScriptSource = storage_path('app/post_site_creation.sh');
-            $wrapperDest = "/tmp/create-site-wrapper.sh";
-            $postScriptDest = "/tmp/post_site_creation.sh";
+            $wrapperDest = "/tmp/create-site-wrapper-{$site->site_name}.sh";
+            $postScriptDest = "/tmp/post_site_creation-{$site->site_name}.sh";
+
+            // Remove old files if they exist
+            if (file_exists($wrapperDest)) {
+                @unlink($wrapperDest);
+            }
+            if (file_exists($postScriptDest)) {
+                @unlink($postScriptDest);
+            }
 
             if (file_exists($wrapperSource)) {
                 copy($wrapperSource, $wrapperDest);
                 chmod($wrapperDest, 0755);
-                Log::info("SPRINT 36: Copied wrapper script", ['dest' => $wrapperDest]);
+                Log::info("SPRINT 36 V2 FIX: Copied wrapper script", ['dest' => $wrapperDest]);
             } else {
                 Log::error("SPRINT 36: Wrapper script not found", ['path' => $wrapperSource]);
                 return;
@@ -40,7 +48,7 @@ class ProcessSiteCreation
             if (file_exists($postScriptSource)) {
                 copy($postScriptSource, $postScriptDest);
                 chmod($postScriptDest, 0755);
-                Log::info("SPRINT 36: Copied post-script", ['dest' => $postScriptDest]);
+                Log::info("SPRINT 36 V2 FIX: Copied post-script", ['dest' => $postScriptDest]);
             } else {
                 Log::error("SPRINT 36: Post-script not found", ['path' => $postScriptSource]);
                 return;
@@ -61,37 +69,40 @@ class ProcessSiteCreation
 
             $args[] = "--template=" . escapeshellarg($site->template ?? 'php');
 
-            // Execute wrapper script with sudo
+            // Execute wrapper script with sudo (using unique script name)
             $wrapperCommand = "nohup /usr/bin/sudo -n " . $wrapperDest . " " . implode(" ", $args) . 
                             " > /tmp/site-creation-{$site->site_name}.log 2>&1 & echo $!";
 
-            Log::info("SPRINT 36: Executing wrapper script via Event", [
+            Log::info("SPRINT 36 V2 FIX: Executing wrapper script via Event", [
                 'command' => $wrapperCommand,
-                'site_name' => $site->site_name
+                'site_name' => $site->site_name,
+                'unique_script' => $wrapperDest
             ]);
 
             $wrapperPid = trim(shell_exec($wrapperCommand));
 
-            Log::info("SPRINT 36: Wrapper script started", [
+            Log::info("SPRINT 36 V2 FIX: Wrapper script started", [
                 'pid' => $wrapperPid,
                 'site_name' => $site->site_name
             ]);
 
-            // Execute post-creation script with delay
+            // Execute post-creation script with delay (using unique script name)
             $postCommand = "(sleep 10 && /usr/bin/sudo -n " . $postScriptDest . " " . 
                           escapeshellarg($site->site_name) . 
                           ") > /tmp/post-site-{$site->site_name}.log 2>&1 &";
 
-            Log::info("SPRINT 36: Executing post-creation script via Event", [
+            Log::info("SPRINT 36 V2 FIX: Executing post-creation script via Event", [
                 'command' => $postCommand,
-                'site_name' => $site->site_name
+                'site_name' => $site->site_name,
+                'unique_script' => $postScriptDest
             ]);
 
             shell_exec($postCommand);
 
-            Log::info("SPRINT 36: Post-creation script started", [
+            Log::info("SPRINT 36 V2 FIX: Post-creation script started", [
                 'site_name' => $site->site_name,
-                'expected_completion' => '~25 seconds'
+                'expected_completion' => '~25 seconds',
+                'cleanup_note' => 'Scripts will auto-delete after execution'
             ]);
 
         } catch (\Exception $e) {
