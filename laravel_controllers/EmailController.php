@@ -53,6 +53,15 @@ class EmailController extends Controller
     }
     
     /**
+     * Show form to create new email domain
+     * SPRINT 37 FIX: Added missing create method
+     */
+    public function createDomain()
+    {
+        return view('email.domains-create');
+    }
+    
+    /**
      * Store new email domain
      */
     public function storeDomain(Request $request)
@@ -159,6 +168,20 @@ class EmailController extends Controller
             'domains' => $domainNames,  // Pass simple array of strings
             'selectedDomain' => $domain,
             'accounts' => $accounts
+        ]);
+    }
+    
+    /**
+     * Show form to create new email account
+     * SPRINT 37 FIX: Added missing create method
+     */
+    public function createAccount()
+    {
+        // Get list of domains for dropdown
+        $domains = EmailDomain::pluck('domain')->toArray();
+        
+        return view('email.accounts-create', [
+            'domains' => $domains
         ]);
     }
     
