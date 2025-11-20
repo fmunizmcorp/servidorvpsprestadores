@@ -177,13 +177,30 @@ class AdminPanelTester:
                 self.results['create_site'] = {"status": "FAILED", "code": create_page.status_code}
                 return False
             
-            # 2. Submeter formulário
+            # 2. Extrair CSRF token da página de criação
+            csrf_token = None
+            csrf_match = re.search(r'<input[^>]*name=["\']_token["\'][^>]*value=["\'](.*?)["\']', create_page.text)
+            if not csrf_match:
+                # Tentar padrão alternativo
+                csrf_match = re.search(r'<meta[^>]*name=["\']csrf-token["\'][^>]*content=["\'](.*?)["\']', create_page.text)
+            
+            if csrf_match:
+                csrf_token = csrf_match.group(1)
+                self.log(f"CSRF token extraído para POST: {csrf_token[:20]}...", "INFO")
+            else:
+                self.log("⚠️ CSRF token não encontrado na página, tentando sem token", "WARNING")
+            
+            # 3. Submeter formulário COM CSRF TOKEN
             site_data = {
                 'site_name': site_name,
                 'domain': f"{site_name}.local",
                 'template': 'html',
                 'create_database': 'on'
             }
+            
+            # Adicionar CSRF token se encontrado
+            if csrf_token:
+                site_data['_token'] = csrf_token
             
             response = self.session.post(
                 f"{self.base_url}/sites",
