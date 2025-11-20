@@ -9,7 +9,7 @@ use Illuminate\Support\Facades\Validator;
 
 class EmailController extends Controller
 {
-    private $scriptsPath = '/tmp';
+    private $scriptsPath = '/opt/webserver/scripts';
     private $postfixPath = '/etc/postfix';
     
     /**
@@ -66,11 +66,15 @@ class EmailController extends Controller
      */
     public function storeDomain(Request $request)
     {
+        // SPRINT 38 DEBUG: Log início do método
+        \Log::info("SPRINT 38: storeDomain() called", ['domain' => $request->domain]);
+        
         $validator = Validator::make($request->all(), [
             'domain' => 'required|regex:/^[a-z0-9\.\-]+$/|max:255'
         ]);
         
         if ($validator->fails()) {
+            \Log::error("SPRINT 38: Validation failed", ['errors' => $validator->errors()->toArray()]);
             return redirect()->back()
                 ->withErrors($validator)
                 ->withInput();
@@ -80,12 +84,18 @@ class EmailController extends Controller
             $domain = $request->domain;
             $script = "{$this->scriptsPath}/create-email-domain.sh";
             
+            \Log::info("SPRINT 38: Checking script", ['script' => $script, 'exists' => file_exists($script)]);
+            
             if (!file_exists($script)) {
-                throw new \Exception("Script create-email-domain.sh not found");
+                \Log::error("SPRINT 38: Script not found", ['script' => $script]);
+                throw new \Exception("Script create-email-domain.sh not found at: $script");
             }
             
             $command = "bash $script $domain 2>&1";
+            \Log::info("SPRINT 38: Executing script", ['command' => $command]);
+            
             $output = shell_exec($command);
+            \Log::info("SPRINT 38: Script output", ['output' => substr($output, 0, 500)]);
             
             // SPRINT 26 FIX: Save to database after successful creation
             // Parse DKIM key from output if present
@@ -94,7 +104,9 @@ class EmailController extends Controller
                 $dkimPublicKey = $matches[1];
             }
             
-            EmailDomain::create([
+            \Log::info("SPRINT 38: Saving to database", ['domain' => $domain]);
+            
+            $emailDomain = EmailDomain::create([
                 'domain' => $domain,
                 'status' => 'active',
                 'dkim_selector' => 'mail',
@@ -104,11 +116,20 @@ class EmailController extends Controller
                 'dmarc_record' => "v=DMARC1; p=quarantine; rua=mailto:dmarc@{$domain}",
             ]);
             
+            \Log::info("SPRINT 38: Domain saved successfully", ['id' => $emailDomain->id, 'domain' => $domain]);
+            
             return redirect()->route('email.domains')
                 ->with('success', "Email domain $domain created successfully!")
                 ->with('output', $output);
                 
         } catch (\Exception $e) {
+            \Log::error("SPRINT 38: Exception caught", [
+                'message' => $e->getMessage(),
+                'file' => $e->getFile(),
+                'line' => $e->getLine(),
+                'trace' => substr($e->getTraceAsString(), 0, 1000)
+            ]);
+            
             return redirect()->back()
                 ->with('error', 'Failed to create domain: ' . $e->getMessage())
                 ->withInput();
@@ -190,6 +211,12 @@ class EmailController extends Controller
      */
     public function storeAccount(Request $request)
     {
+        // SPRINT 38 DEBUG: Log início do método
+        \Log::info("SPRINT 38: storeAccount() called", [
+            'domain' => $request->domain,
+            'username' => $request->username
+        ]);
+        
         $validator = Validator::make($request->all(), [
             'domain' => 'required',
             'username' => 'required|alpha_dash|max:50',
@@ -198,6 +225,7 @@ class EmailController extends Controller
         ]);
         
         if ($validator->fails()) {
+            \Log::error("SPRINT 38: Validation failed", ['errors' => $validator->errors()->toArray()]);
             return redirect()->back()
                 ->withErrors($validator)
                 ->withInput();
@@ -212,15 +240,21 @@ class EmailController extends Controller
             
             // SPRINT 33 FIX: Validate that email domain exists before creating account
             // This prevents foreign key constraint violations
+            \Log::info("SPRINT 38: Checking if domain exists", ['domain' => $domain]);
+            
             $emailDomain = EmailDomain::where('domain', $domain)->first();
             if (!$emailDomain) {
+                \Log::error("SPRINT 38: Domain not found", ['domain' => $domain]);
                 throw new \Exception("Email domain '$domain' does not exist. Please create the email domain first.");
             }
             
             $script = "{$this->scriptsPath}/create-email.sh";
             
+            \Log::info("SPRINT 38: Checking script", ['script' => $script, 'exists' => file_exists($script)]);
+            
             if (!file_exists($script)) {
-                throw new \Exception("Script create-email.sh not found");
+                \Log::error("SPRINT 38: Script not found", ['script' => $script]);
+                throw new \Exception("Script create-email.sh not found at: $script");
             }
             
             // Script expects: domain username password quota
@@ -228,12 +262,16 @@ class EmailController extends Controller
                        escapeshellarg($username) . " " . 
                        escapeshellarg($password) . " " . 
                        escapeshellarg($quota) . " 2>&1";
+                       
+            \Log::info("SPRINT 38: Executing script", ['command' => preg_replace('/\s+[^\s]+\s+\d+\s+2>&1$/', ' [PASSWORD REDACTED] [QUOTA] 2>&1', $command)]);
+            
             $output = shell_exec($command);
+            \Log::info("SPRINT 38: Script output", ['output' => substr($output, 0, 500)]);
             
             // SPRINT 26 FIX: Save to database after successful creation
             // SPRINT 28 FIX: Add explicit error handling and logging
             // SPRINT 33 FIX: Domain validation added above to prevent FK constraint errors
-            \Log::info("Attempting to save email account to database", ['email' => $email]);
+            \Log::info("SPRINT 38: Attempting to save email account to database", ['email' => $email]);
             
             $account = EmailAccount::create([
                 'email' => $email,
@@ -244,12 +282,19 @@ class EmailController extends Controller
                 'status' => 'active',
             ]);
             
-            \Log::info("Email account saved to database successfully", ['account_id' => $account->id]);
+            \Log::info("SPRINT 38: Email account saved to database successfully", ['account_id' => $account->id]);
             
             return redirect()->route('email.accounts', ['domain' => $domain])
                 ->with('success', "Email account $email created successfully!");
                 
         } catch (\Exception $e) {
+            \Log::error("SPRINT 38: Exception caught", [
+                'message' => $e->getMessage(),
+                'file' => $e->getFile(),
+                'line' => $e->getLine(),
+                'trace' => substr($e->getTraceAsString(), 0, 1000)
+            ]);
+            
             return redirect()->back()
                 ->with('error', 'Failed to create account: ' . $e->getMessage())
                 ->withInput();
