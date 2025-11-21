@@ -9,7 +9,26 @@
         <div class="max-w-3xl mx-auto sm:px-6 lg:px-8">
             <div class="bg-white overflow-hidden shadow-sm sm:rounded-lg">
                 <div class="p-6 bg-white border-b border-gray-200">
-                    <form method="POST" action="{{ route('sites.store') }}">
+                    <!-- Processing Overlay -->
+                    <div id="processing-overlay" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.7); z-index:9999; justify-content:center; align-items:center;">
+                        <div style="background:white; padding:40px; border-radius:10px; text-align:center; max-width:500px;">
+                            <div style="margin-bottom:20px;">
+                                <svg class="animate-spin h-16 w-16 mx-auto text-blue-500" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                                    <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                                    <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                                </svg>
+                            </div>
+                            <h3 style="font-size:1.5rem; font-weight:bold; color:#1f2937; margin-bottom:10px;">Creating Site...</h3>
+                            <p style="color:#6b7280; margin-bottom:20px;">Site creation is in progress. This process takes approximately <strong>25-30 seconds</strong>.</p>
+                            <div style="background:#e5e7eb; height:8px; border-radius:4px; overflow:hidden; margin-bottom:15px;">
+                                <div id="progress-bar" style="background:#3b82f6; height:100%; width:0%; transition:width 0.5s;"></div>
+                            </div>
+                            <p style="color:#9ca3af; font-size:0.875rem;">Please wait, you will be redirected automatically...</p>
+                            <p style="color:#9ca3af; font-size:0.875rem; margin-top:10px;"><strong>Do not close this window or refresh the page.</strong></p>
+                        </div>
+                    </div>
+
+                    <form method="POST" action="{{ route('sites.store') }}" id="site-create-form">
                         @csrf
 
                         <!-- Site Name -->
@@ -100,4 +119,31 @@
             </div>
         </div>
     </div>
+
+    <script>
+        document.getElementById('site-create-form').addEventListener('submit', function(e) {
+            // Show processing overlay
+            const overlay = document.getElementById('processing-overlay');
+            overlay.style.display = 'flex';
+            
+            // Disable submit button to prevent double-submission
+            const submitBtn = this.querySelector('button[type="submit"]');
+            submitBtn.disabled = true;
+            submitBtn.style.opacity = '0.5';
+            submitBtn.textContent = 'Creating...';
+            
+            // Animate progress bar over 30 seconds
+            const progressBar = document.getElementById('progress-bar');
+            let progress = 0;
+            const interval = setInterval(function() {
+                progress += 1;
+                progressBar.style.width = progress + '%';
+                
+                if (progress >= 95) {
+                    clearInterval(interval);
+                    // Keep at 95% until actual redirect happens
+                }
+            }, 300); // Update every 300ms for 30 seconds (300ms * 100 = 30s)
+        });
+    </script>
 </x-app-layout>
