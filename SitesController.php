@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Support\Str;
+use App\Models\Site;
 
 class SitesController extends Controller
 {
@@ -87,6 +88,18 @@ class SitesController extends Controller
             if (strpos($output, 'successfully') === false && strpos($output, 'ERROR') !== false) {
                 throw new \Exception("Site creation failed: " . substr($output, 0, 500));
             }
+            
+            // SPRINT 50 FIX: Persistir no banco de dados (problema de 28 sprints!)
+            $site = Site::create([
+                'site_name' => $siteName,
+                'domain' => $domain,
+                'php_version' => $phpVersion,
+                'has_database' => !$createDB, // Se $createDB está vazio, tem database
+                'database_name' => !$createDB ? $siteName . '_db' : null,
+                'database_user' => !$createDB ? $siteName . '_user' : null,
+                'template' => $template,
+                'status' => 'active',
+            ]);
             
             // Parse output for credentials
             $credentialsFile = "/opt/webserver/sites/$siteName/CREDENTIALS.txt";
@@ -317,30 +330,28 @@ class SitesController extends Controller
     
     /**
      * Get all sites
+     * SPRINT 50 FIX: Buscar do banco de dados ao invés de filesystem
      */
     private function getAllSites()
     {
-        $sites = [];
+        $sites = Site::orderBy('created_at', 'desc')->get();
         
-        if (!is_dir($this->sitesPath)) {
-            return $sites;
-        }
-        
-        $dirs = scandir($this->sitesPath);
-        
-        foreach ($dirs as $dir) {
-            if ($dir === '.' || $dir === '..') {
-                continue;
-            }
+        // Converter para formato de array com chaves corretas para view
+        return $sites->map(function($site) {
+            $sitePath = $this->sitesPath . '/' . $site->site_name;
+            $diskUsage = is_dir($sitePath) ? $this->getDiskUsage($sitePath) : 'N/A';
             
-            $sitePath = $this->sitesPath . '/' . $dir;
-            
-            if (is_dir($sitePath)) {
-                $sites[] = $this->getSiteDetails($dir);
-            }
-        }
-        
-        return $sites;
+            return [
+                'name' => $site->site_name,
+                'domain' => $site->domain,
+                'path' => $sitePath,
+                'disk_usage' => $diskUsage,
+                'phpVersion' => $site->php_version,
+                'ssl' => $site->ssl_enabled ?? false,
+                'nginxEnabled' => $site->status === 'active',
+                'created_at' => $site->created_at->timestamp ?? time()
+            ];
+        })->toArray();
     }
     
     /**

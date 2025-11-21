@@ -204,8 +204,10 @@ class EmailController extends Controller
         }
 
         // Create account in database
+        // SPRINT 50 FIX: Campo 'username' faltando causava erro SQL
         $emailAccount = EmailAccount::create([
             'email' => $email,
+            'username' => $request->username,
             'domain' => $request->domain,
             'quota' => $request->quota,
             'status' => 'active'
