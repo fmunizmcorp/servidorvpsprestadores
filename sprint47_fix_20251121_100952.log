@@ -1,0 +1,102 @@
+
+[0;34m===================================================[0m
+[0;34mSTEP 1: Criando backup preventivo[0m
+[0;34m===================================================[0m
+
+[0;32m[2025-11-21 10:09:52][0m Criando diretório de backup: sprint47_backup_20251121_100952
+[0;32m[2025-11-21 10:09:54][0m Backup de views compiladas...
+[0;32m[2025-11-21 10:09:55][0m Backup de cache...
+[0;32m[2025-11-21 10:09:57][0m ✓ Backup preventivo concluído
+
+[0;34m===================================================[0m
+[0;34mSTEP 2: Diagnóstico - Verificando estado atual[0m
+[0;34m===================================================[0m
+
+[0;32m[2025-11-21 10:09:57][0m Contando views compiladas...
+[0;32m[2025-11-21 10:09:59][0m Views compiladas encontradas: 1
+[0;32m[2025-11-21 10:09:59][0m Verificando permissões do diretório storage...
+drwxrwxr-x 2 www-data www-data 4096 Nov 21 07:09 views
+[0;32m[2025-11-21 10:10:00][0m Verificando se PHP-FPM está ativo...
+[0;32m[2025-11-21 10:10:02][0m PHP-FPM status: active
+
+[0;34m===================================================[0m
+[0;34mSTEP 3: Limpando cache de views - FIX PRINCIPAL[0m
+[0;34m===================================================[0m
+
+[0;32m[2025-11-21 10:10:02][0m Removendo TODAS as views compiladas...
+[0;32m[2025-11-21 10:10:05][0m Views restantes após limpeza (exceto .gitignore): 0
+[0;32m[2025-11-21 10:10:05][0m ✓ Cache de views removido com sucesso
+
+[0;34m===================================================[0m
+[0;34mSTEP 4: Limpando caches do Laravel via Artisan[0m
+[0;34m===================================================[0m
+
+[0;32m[2025-11-21 10:10:05][0m php artisan view:clear...
+
+   INFO  Compiled views cleared successfully.  
+
+[0;32m[2025-11-21 10:10:08][0m php artisan config:clear...
+
+   INFO  Configuration cache cleared successfully.  
+
+[0;32m[2025-11-21 10:10:10][0m php artisan cache:clear...
+
+   INFO  Application cache cleared successfully.  
+
+[0;32m[2025-11-21 10:10:11][0m php artisan route:clear...
+
+   INFO  Route cache cleared successfully.  
+
+[0;32m[2025-11-21 10:10:13][0m php artisan optimize:clear...
+
+   INFO  Clearing cached bootstrap files.  
+
+  config ......................................................... 2.29ms DONE
+  cache ......................................................... 20.07ms DONE
+  compiled ....................................................... 1.25ms DONE
+  events ......................................................... 0.55ms DONE
+  routes ......................................................... 0.38ms DONE
+  views .......................................................... 5.98ms DONE
+
+[0;32m[2025-11-21 10:10:15][0m ✓ Todos os caches Artisan limpos
+
+[0;34m===================================================[0m
+[0;34mSTEP 5: Recompilando otimizações do Laravel[0m
+[0;34m===================================================[0m
+
+[0;32m[2025-11-21 10:10:15][0m php artisan config:cache...
+
+   INFO  Configuration cached successfully.  
+
+[0;32m[2025-11-21 10:10:17][0m php artisan route:cache...
+
+   INFO  Routes cached successfully.  
+
+[0;32m[2025-11-21 10:10:19][0m php artisan optimize...
+
+   INFO  Caching framework bootstrap, configuration, and metadata.  
+
+  config ......................................................... 4.08ms DONE
+  events ......................................................... 0.98ms DONE
+  routes ........................................................ 10.15ms FAIL
+
+   TypeError 
+
+  Illuminate\Foundation\Console\RouteCacheCommand::buildRouteCacheFile(): Argument #1 ($routes) must be of type Illuminate\Routing\RouteCollection, Illuminate\Routing\CompiledRouteCollection given, called in /opt/webserver/admin-panel/vendor/laravel/framework/src/Illuminate/Foundation/Console/RouteCacheCommand.php on line 67
+
+  at vendor/laravel/framework/src/Illuminate/Foundation/Console/RouteCacheCommand.php:104
+    100▕      *
+    101▕      * @param  \Illuminate\Routing\RouteCollection  $routes
+    102▕      * @return string
+    103▕      */
+  ➜ 104▕     protected function buildRouteCacheFile(RouteCollection $routes)
+    105▕     {
+    106▕         $stub = $this->files->get(__DIR__.'/stubs/routes.stub');
+    107▕ 
+    108▕         return str_replace('{{routes}}', var_export($routes->compile(), true), $stub);
+
+      [2m+29 vendor frames [22m
+
+  30  artisan:16
+      Illuminate\Foundation\Application::handleCommand()
+

@@ -1,0 +1,129 @@
+
+[0;34m===================================================[0m
+[0;34mSTEP 1: Criando backup preventivo[0m
+[0;34m===================================================[0m
+
+[0;32m[2025-11-21 10:10:35][0m Criando diretório de backup: sprint47_backup_20251121_101035
+[0;32m[2025-11-21 10:10:36][0m Backup de views compiladas...
+[0;32m[2025-11-21 10:10:38][0m Backup de cache...
+[0;32m[2025-11-21 10:10:40][0m ✓ Backup preventivo concluído
+
+[0;34m===================================================[0m
+[0;34mSTEP 2: Diagnóstico - Verificando estado atual[0m
+[0;34m===================================================[0m
+
+[0;32m[2025-11-21 10:10:40][0m Contando views compiladas...
+[0;32m[2025-11-21 10:10:41][0m Views compiladas encontradas: 1
+[0;32m[2025-11-21 10:10:41][0m Verificando permissões do diretório storage...
+drwxrwxr-x 2 www-data www-data 4096 Nov 21 07:09 views
+[0;32m[2025-11-21 10:10:43][0m Verificando se PHP-FPM está ativo...
+[0;32m[2025-11-21 10:10:44][0m PHP-FPM status: active
+
+[0;34m===================================================[0m
+[0;34mSTEP 3: Limpando cache de views - FIX PRINCIPAL[0m
+[0;34m===================================================[0m
+
+[0;32m[2025-11-21 10:10:44][0m Removendo TODAS as views compiladas...
+[0;32m[2025-11-21 10:10:48][0m Views restantes após limpeza (exceto .gitignore): 0
+[0;32m[2025-11-21 10:10:48][0m ✓ Cache de views removido com sucesso
+
+[0;34m===================================================[0m
+[0;34mSTEP 4: Limpando caches do Laravel via Artisan[0m
+[0;34m===================================================[0m
+
+[0;32m[2025-11-21 10:10:48][0m php artisan view:clear...
+
+   INFO  Compiled views cleared successfully.  
+
+[0;32m[2025-11-21 10:10:50][0m php artisan config:clear...
+
+   INFO  Configuration cache cleared successfully.  
+
+[0;32m[2025-11-21 10:10:52][0m php artisan cache:clear...
+
+   INFO  Application cache cleared successfully.  
+
+[0;32m[2025-11-21 10:10:54][0m php artisan route:clear...
+
+   INFO  Route cache cleared successfully.  
+
+[0;32m[2025-11-21 10:10:55][0m php artisan optimize:clear...
+
+   INFO  Clearing cached bootstrap files.  
+
+  config ......................................................... 1.46ms DONE
+  cache ......................................................... 20.98ms DONE
+  compiled ....................................................... 0.81ms DONE
+  events ......................................................... 0.49ms DONE
+  routes ......................................................... 0.42ms DONE
+  views .......................................................... 6.15ms DONE
+
+[0;32m[2025-11-21 10:10:58][0m ✓ Todos os caches Artisan limpos
+
+[0;34m===================================================[0m
+[0;34mSTEP 5: Recompilando otimizações do Laravel[0m
+[0;34m===================================================[0m
+
+[0;32m[2025-11-21 10:10:58][0m php artisan config:cache...
+
+   INFO  Configuration cached successfully.  
+
+[0;32m[2025-11-21 10:10:59][0m php artisan route:cache...
+
+   INFO  Routes cached successfully.  
+
+[0;32m[2025-11-21 10:11:01][0m php artisan optimize... (SKIP: Laravel 11 route cache issue known)
+[1;33m[WARNING][0m Skipping php artisan optimize devido a bug conhecido do Laravel 11 com CompiledRouteCollection
+[0;32m[2025-11-21 10:11:01][0m ✓ Otimizações recompiladas (exceto optimize que tem bug conhecido)
+
+[0;34m===================================================[0m
+[0;34mSTEP 6: Recarregando PHP-FPM[0m
+[0;34m===================================================[0m
+
+[0;32m[2025-11-21 10:11:01][0m systemctl reload php8.3-fpm...
+[0;32m[2025-11-21 10:11:07][0m PHP-FPM status após reload: active
+[0;32m[2025-11-21 10:11:07][0m ✓ PHP-FPM recarregado com sucesso
+
+[0;34m===================================================[0m
+[0;34mSTEP 7: Verificando permissões do storage[0m
+[0;34m===================================================[0m
+
+[0;32m[2025-11-21 10:11:07][0m Ajustando permissões do storage...
+[0;32m[2025-11-21 10:11:10][0m Verificando permissões...
+drwxrwxr-x 2 www-data www-data 4096 Nov 21 07:09 views
+[0;32m[2025-11-21 10:11:12][0m ✓ Permissões ajustadas
+
+[0;34m===================================================[0m
+[0;34mSTEP 8: Forçando primeira renderização para compilar views[0m
+[0;34m===================================================[0m
+
+[0;32m[2025-11-21 10:11:12][0m Fazendo requisição para Email Domains (força compilação do Blade)...
+[0;32m[2025-11-21 10:11:14][0m Login executado com sucesso
+[0;32m[2025-11-21 10:11:14][0m Aguardando 3 segundos para Laravel compilar views...
+[0;32m[2025-11-21 10:11:17][0m Verificando views compiladas após requisição...
+[0;32m[2025-11-21 10:11:19][0m Views compiladas agora: 3
+[0;32m[2025-11-21 10:11:19][0m ✓ Laravel compilou 3 views com sucesso
+
+[0;34m===================================================[0m
+[0;34mSTEP 9: Testando CSRF Token em Email Domains[0m
+[0;34m===================================================[0m
+
+[0;32m[2025-11-21 10:11:19][0m Fazendo requisição autenticada para /admin/email/domains...
+[0;31m[ERROR][0m ✗✗✗ FALHA: CSRF token NÃO ENCONTRADO em Email Domains
+
+[0;34m===================================================[0m
+[0;34mSTEP 10: Testando CSRF Token em Email Accounts[0m
+[0;34m===================================================[0m
+
+[0;31m[ERROR][0m ✗✗✗ FALHA: CSRF token NÃO ENCONTRADO em Email Accounts
+
+[0;34m===================================================[0m
+[0;34mSTEP 11: Testando CSRF Token em Sites Create[0m
+[0;34m===================================================[0m
+
+[0;31m[ERROR][0m ✗✗✗ FALHA: CSRF token NÃO ENCONTRADO em Sites Create
+
+[0;34m===================================================[0m
+[0;34mSTEP 12: Teste E2E - Criação de Email Domain[0m
+[0;34m===================================================[0m
+

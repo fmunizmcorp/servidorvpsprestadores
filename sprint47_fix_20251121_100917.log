@@ -1,0 +1,28 @@
+
+[0;34m===================================================[0m
+[0;34mSTEP 1: Criando backup preventivo[0m
+[0;34m===================================================[0m
+
+[0;32m[2025-11-21 10:09:17][0m Criando diretório de backup: sprint47_backup_20251121_100917
+[0;32m[2025-11-21 10:09:19][0m Backup de views compiladas...
+[0;32m[2025-11-21 10:09:21][0m Backup de cache...
+[0;32m[2025-11-21 10:09:22][0m ✓ Backup preventivo concluído
+
+[0;34m===================================================[0m
+[0;34mSTEP 2: Diagnóstico - Verificando estado atual[0m
+[0;34m===================================================[0m
+
+[0;32m[2025-11-21 10:09:22][0m Contando views compiladas...
+[0;32m[2025-11-21 10:09:24][0m Views compiladas encontradas: 21
+[0;32m[2025-11-21 10:09:24][0m Verificando permissões do diretório storage...
+drwxrwxr-x 2 www-data www-data 4096 Nov 21 06:36 views
+[0;32m[2025-11-21 10:09:26][0m Verificando se PHP-FPM está ativo...
+[0;32m[2025-11-21 10:09:27][0m PHP-FPM status: active
+
+[0;34m===================================================[0m
+[0;34mSTEP 3: Limpando cache de views - FIX PRINCIPAL[0m
+[0;34m===================================================[0m
+
+[0;32m[2025-11-21 10:09:27][0m Removendo TODAS as views compiladas...
+[0;32m[2025-11-21 10:09:31][0m Views restantes após limpeza: 1
+[0;31m[ERROR][0m FALHA: Ainda existem views compiladas após rm -rf
