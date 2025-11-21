@@ -5,6 +5,9 @@ namespace App\Http\Controllers;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Support\Str;
+use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\DB;
 use App\Models\Site;
 
 class SitesController extends Controller
@@ -14,15 +17,26 @@ class SitesController extends Controller
     
     /**
      * Display list of all sites
+     * SPRINT 52: Adicionar headers no-cache para evitar cache de browser
      */
     public function index()
     {
         $sites = $this->getAllSites();
         
-        return view('sites.index', [
-            'sites' => $sites,
-            'total' => count($sites)
+        // SPRINT 52: Log para debug
+        \Log::info('SPRINT52: index() called', [
+            'total_sites' => count($sites),
+            'first_site' => !empty($sites) ? $sites[0]['name'] : 'none'
         ]);
+        
+        return response()
+            ->view('sites.index', [
+                'sites' => $sites,
+                'total' => count($sites)
+            ])
+            ->header('Cache-Control', 'no-cache, no-store, must-revalidate')
+            ->header('Pragma', 'no-cache')
+            ->header('Expires', '0');
     }
     
     /**
@@ -101,6 +115,18 @@ class SitesController extends Controller
                 'status' => 'active',
             ]);
             
+            // SPRINT 52 FIX: Invalidar cache explicitamente após criação
+            \Illuminate\Support\Facades\Cache::forget('sites_list');
+            \Illuminate\Support\Facades\Cache::flush();
+            
+            // SPRINT 52: Log para debug (confirmar persistência)
+            \Log::info('SPRINT52: Site created successfully', [
+                'site_id' => $site->id,
+                'site_name' => $site->site_name,
+                'created_at' => $site->created_at,
+                'total_sites_after' => Site::count()
+            ]);
+            
             // Parse output for credentials
             $credentialsFile = "/opt/webserver/sites/$siteName/CREDENTIALS.txt";
             $credentials = [];
@@ -110,10 +136,14 @@ class SitesController extends Controller
                 $credentials = $this->parseCredentialsFromFile($credContent);
             }
             
+            // SPRINT 52 FIX: Redirect com headers no-cache para forçar reload
             return redirect()->route('sites.index')
                 ->with('success', 'Site created successfully!')
                 ->with('output', $output)
-                ->with('credentials', $credentials);
+                ->with('credentials', $credentials)
+                ->header('Cache-Control', 'no-cache, no-store, must-revalidate')
+                ->header('Pragma', 'no-cache')
+                ->header('Expires', '0');
                 
         } catch (\Exception $e) {
             return redirect()->back()
@@ -331,13 +361,25 @@ class SitesController extends Controller
     /**
      * Get all sites
      * SPRINT 50 FIX: Buscar do banco de dados ao invés de filesystem
+     * SPRINT 52 FIX: Forçar query fresca sem cache, usar DB direto
      */
     private function getAllSites()
     {
-        $sites = Site::orderBy('created_at', 'desc')->get();
+        // SPRINT 52: Usar query direta do DB para evitar qualquer cache do Eloquent
+        // Isso garante que sempre buscamos dados frescos do banco
+        $sitesRaw = DB::table('sites')
+            ->orderBy('created_at', 'desc')
+            ->get();
+        
+        // Log para debug
+        Log::info('SPRINT52: getAllSites() called', [
+            'total_sites' => count($sitesRaw),
+            'method' => 'DB::table direct query',
+            'timestamp' => now()
+        ]);
         
         // Converter para formato de array com chaves corretas para view
-        return $sites->map(function($site) {
+        return $sitesRaw->map(function($site) {
             $sitePath = $this->sitesPath . '/' . $site->site_name;
             $diskUsage = is_dir($sitePath) ? $this->getDiskUsage($sitePath) : 'N/A';
             
@@ -346,10 +388,10 @@ class SitesController extends Controller
                 'domain' => $site->domain,
                 'path' => $sitePath,
                 'disk_usage' => $diskUsage,
-                'phpVersion' => $site->php_version,
+                'phpVersion' => $site->php_version ?? '8.3',
                 'ssl' => $site->ssl_enabled ?? false,
                 'nginxEnabled' => $site->status === 'active',
-                'created_at' => $site->created_at->timestamp ?? time()
+                'created_at' => isset($site->created_at) ? strtotime($site->created_at) : time()
             ];
         })->toArray();
     }
