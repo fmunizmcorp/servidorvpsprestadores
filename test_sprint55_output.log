@@ -1,0 +1,10 @@
+=========================================
+ SPRINT 55 - TESTE WEB UI COMPLETO
+ (Simulando protocolo QA)
+=========================================
+
+📝 Site de teste: qasimulation1763807867
+📝 Domain: qasimulation.com
+
+[1/6] Fazendo login no painel...
+❌ ERRO: Não conseguiu obter CSRF token

@@ -13,11 +13,11 @@ class SitesController extends Controller
     
     /**
      * Display list of all sites
-     * SPRINT 55: Fixed browser cache issue with explicit no-cache headers
+     * SPRINT 54: Fixed with cache clearing (Sprint 53 pattern + cache flush)
      */
     public function index()
     {
-        // SPRINT 55: Query direta Eloquent como EmailController (FUNCIONA!)
+        // SPRINT 54: Query direta Eloquent como EmailController (FUNCIONA!)
         $sites = Site::orderBy('created_at', 'desc')
             ->get()
             ->map(function($site) {
@@ -37,15 +37,10 @@ class SitesController extends Controller
             })
             ->toArray();
         
-        // SPRINT 55: FIX - Adicionar headers explícitos no-cache para prevenir browser cache
-        return response()
-            ->view('sites.index', [
-                'sites' => $sites,
-                'total' => count($sites)
-            ])
-            ->header('Cache-Control', 'no-cache, no-store, must-revalidate, max-age=0')
-            ->header('Pragma', 'no-cache')
-            ->header('Expires', '0');
+        return view('sites.index', [
+            'sites' => $sites,
+            'total' => count($sites)
+        ]);
     }
     
     /**
@@ -87,14 +82,6 @@ class SitesController extends Controller
             $createDB = $request->has('create_database') && $request->create_database ? '' : '--no-db';
             $template = $request->input('template', 'php');
             
-            // SPRINT 55: Logging para debug
-            \Log::info('=== SPRINT55: store() called ===', [
-                'site_name' => $siteName,
-                'domain' => $domain,
-                'php_version' => $phpVersion,
-                'create_database' => $createDB
-            ]);
-            
             // Build command with wrapper
             $wrapper = "/opt/webserver/scripts/wrappers/create-site-wrapper.sh";
             
@@ -112,25 +99,13 @@ class SitesController extends Controller
             
             $command = "sudo " . $wrapper . " " . implode(" ", $args) . " 2>&1";
             
-            \Log::info('SPRINT55: Executing command', ['command' => $command]);
-            
             // Execute command
             $output = shell_exec($command);
             
-            \Log::info('SPRINT55: Script output', ['output' => substr($output ?? '', 0, 500)]);
-            
-            // SPRINT 55: FIX - Melhor verificação de sucesso
-            if (empty($output)) {
-                \Log::error('SPRINT55: Script returned empty output');
-                throw new \Exception("Site creation script returned no output");
+            // Check if site was created successfully
+            if (strpos($output, 'successfully') === false && strpos($output, 'ERROR') !== false) {
+                throw new \Exception("Site creation failed: " . substr($output, 0, 500));
             }
-            
-            if (strpos($output, 'successfully') === false) {
-                \Log::error('SPRINT55: Script did not return success message');
-                throw new \Exception("Site creation may have failed: " . substr($output, 0, 500));
-            }
-            
-            \Log::info('SPRINT55: Script succeeded, persisting to database');
             
             // SPRINT 53: Persistir no banco como EmailController (SIMPLES E DIRETO)
             $site = Site::create([
@@ -143,8 +118,6 @@ class SitesController extends Controller
                 'template' => $template,
                 'status' => 'active',
             ]);
-            
-            \Log::info('SPRINT55: Site persisted to database', ['site_id' => $site->id]);
             
             // Parse output for credentials
             $credentialsFile = "/opt/webserver/sites/$siteName/CREDENTIALS.txt";
