@@ -13,11 +13,11 @@ class SitesController extends Controller
     
     /**
      * Display list of all sites
-     * SPRINT 53: Reconstruído como EmailController (que funciona!)
+     * SPRINT 54: Fixed with cache clearing (Sprint 53 pattern + cache flush)
      */
     public function index()
     {
-        // SPRINT 53: Query direta Eloquent como EmailController
+        // SPRINT 54: Query direta Eloquent como EmailController (FUNCIONA!)
         $sites = Site::orderBy('created_at', 'desc')
             ->get()
             ->map(function($site) {
