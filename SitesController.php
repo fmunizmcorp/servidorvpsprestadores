@@ -2,13 +2,9 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\Site;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Validator;
-use Illuminate\Support\Str;
-use Illuminate\Support\Facades\Cache;
-use Illuminate\Support\Facades\Log;
-use Illuminate\Support\Facades\DB;
-use App\Models\Site;
 
 class SitesController extends Controller
 {
@@ -17,26 +13,34 @@ class SitesController extends Controller
     
     /**
      * Display list of all sites
-     * SPRINT 52: Adicionar headers no-cache para evitar cache de browser
+     * SPRINT 53: Reconstruído como EmailController (que funciona!)
      */
     public function index()
     {
-        $sites = $this->getAllSites();
+        // SPRINT 53: Query direta Eloquent como EmailController
+        $sites = Site::orderBy('created_at', 'desc')
+            ->get()
+            ->map(function($site) {
+                $sitePath = $this->sitesPath . '/' . $site->site_name;
+                $diskUsage = is_dir($sitePath) ? $this->getDiskUsage($sitePath) : 'N/A';
+                
+                return [
+                    'name' => $site->site_name,
+                    'domain' => $site->domain,
+                    'path' => $sitePath,
+                    'disk_usage' => $diskUsage,
+                    'phpVersion' => $site->php_version,
+                    'ssl' => $site->ssl_enabled ?? false,
+                    'nginxEnabled' => $site->status === 'active',
+                    'created_at' => $site->created_at->timestamp ?? time()
+                ];
+            })
+            ->toArray();
         
-        // SPRINT 52: Log para debug
-        \Log::info('SPRINT52: index() called', [
-            'total_sites' => count($sites),
-            'first_site' => !empty($sites) ? $sites[0]['name'] : 'none'
+        return view('sites.index', [
+            'sites' => $sites,
+            'total' => count($sites)
         ]);
-        
-        return response()
-            ->view('sites.index', [
-                'sites' => $sites,
-                'total' => count($sites)
-            ])
-            ->header('Cache-Control', 'no-cache, no-store, must-revalidate')
-            ->header('Pragma', 'no-cache')
-            ->header('Expires', '0');
     }
     
     /**
@@ -103,28 +107,16 @@ class SitesController extends Controller
                 throw new \Exception("Site creation failed: " . substr($output, 0, 500));
             }
             
-            // SPRINT 50 FIX: Persistir no banco de dados (problema de 28 sprints!)
+            // SPRINT 53: Persistir no banco como EmailController (SIMPLES E DIRETO)
             $site = Site::create([
                 'site_name' => $siteName,
                 'domain' => $domain,
                 'php_version' => $phpVersion,
-                'has_database' => !$createDB, // Se $createDB está vazio, tem database
+                'has_database' => !$createDB,
                 'database_name' => !$createDB ? $siteName . '_db' : null,
                 'database_user' => !$createDB ? $siteName . '_user' : null,
                 'template' => $template,
                 'status' => 'active',
-            ]);
-            
-            // SPRINT 52 FIX: Invalidar cache explicitamente após criação
-            \Illuminate\Support\Facades\Cache::forget('sites_list');
-            \Illuminate\Support\Facades\Cache::flush();
-            
-            // SPRINT 52: Log para debug (confirmar persistência)
-            \Log::info('SPRINT52: Site created successfully', [
-                'site_id' => $site->id,
-                'site_name' => $site->site_name,
-                'created_at' => $site->created_at,
-                'total_sites_after' => Site::count()
             ]);
             
             // Parse output for credentials
@@ -136,14 +128,11 @@ class SitesController extends Controller
                 $credentials = $this->parseCredentialsFromFile($credContent);
             }
             
-            // SPRINT 52 FIX: Redirect com headers no-cache para forçar reload
+            // SPRINT 53: Redirect simples como EmailController
             return redirect()->route('sites.index')
                 ->with('success', 'Site created successfully!')
                 ->with('output', $output)
-                ->with('credentials', $credentials)
-                ->header('Cache-Control', 'no-cache, no-store, must-revalidate')
-                ->header('Pragma', 'no-cache')
-                ->header('Expires', '0');
+                ->with('credentials', $credentials);
                 
         } catch (\Exception $e) {
             return redirect()->back()
@@ -358,44 +347,7 @@ class SitesController extends Controller
     
     // ========== HELPER METHODS ==========
     
-    /**
-     * Get all sites
-     * SPRINT 50 FIX: Buscar do banco de dados ao invés de filesystem
-     * SPRINT 52 FIX: Forçar query fresca sem cache, usar DB direto
-     */
-    private function getAllSites()
-    {
-        // SPRINT 52: Usar query direta do DB para evitar qualquer cache do Eloquent
-        // Isso garante que sempre buscamos dados frescos do banco
-        $sitesRaw = DB::table('sites')
-            ->orderBy('created_at', 'desc')
-            ->get();
-        
-        // Log para debug
-        Log::info('SPRINT52: getAllSites() called', [
-            'total_sites' => count($sitesRaw),
-            'method' => 'DB::table direct query',
-            'timestamp' => now()
-        ]);
-        
-        // Converter para formato de array com chaves corretas para view
-        return $sitesRaw->map(function($site) {
-            $sitePath = $this->sitesPath . '/' . $site->site_name;
-            $diskUsage = is_dir($sitePath) ? $this->getDiskUsage($sitePath) : 'N/A';
-            
-            return [
-                'name' => $site->site_name,
-                'domain' => $site->domain,
-                'path' => $sitePath,
-                'disk_usage' => $diskUsage,
-                'phpVersion' => $site->php_version ?? '8.3',
-                'ssl' => $site->ssl_enabled ?? false,
-                'nginxEnabled' => $site->status === 'active',
-                'created_at' => isset($site->created_at) ? strtotime($site->created_at) : time()
-            ];
-        })->toArray();
-    }
-    
+
     /**
      * Get site details
      */
