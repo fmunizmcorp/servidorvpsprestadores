@@ -1,0 +1,17 @@
+# SPRINT 57: ADD CSRF REFRESH ROUTE TO routes/web.php
+#
+# Add this route INSIDE the Route::middleware(['auth'])->group(function () { ... });
+# block, ideally near the top after the dashboard route.
+#
+# This provides a secure endpoint to fetch fresh CSRF tokens before form submission,
+# preventing TokenMismatchException when session/token expires or rotates.
+
+// SPRINT 57 FIX: CSRF token refresh endpoint
+// Used by sites/create form to get fresh token before submission
+Route::get('/csrf-refresh', function() {
+    return response()->json([
+        'token' => csrf_token(),
+        'session_id' => session()->getId(),
+        'timestamp' => now()->toDateTimeString(),
+    ]);
+})->name('csrf.refresh');

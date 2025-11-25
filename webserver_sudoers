@@ -1,0 +1,27 @@
+# Allow www-data to execute webserver management scripts without password
+# This is required for the admin panel to manage sites, backups, email, etc.
+
+# User alias for webserver
+User_Alias WEBSERVER_USERS = www-data
+
+# Command aliases for webserver scripts
+Cmnd_Alias WEBSERVER_SCRIPTS = \
+    /opt/webserver/scripts/wrappers/create-site-wrapper.sh, \
+    /opt/webserver/scripts/wrappers/delete-site-wrapper.sh, \
+    /opt/webserver/scripts/wrappers/create-backup-wrapper.sh, \
+    /opt/webserver/scripts/wrappers/restore-backup-wrapper.sh, \
+    /opt/webserver/scripts/wrappers/create-email-domain-wrapper.sh, \
+    /opt/webserver/scripts/wrappers/delete-email-domain-wrapper.sh, \
+    /opt/webserver/scripts/wrappers/create-email-account-wrapper.sh, \
+    /opt/webserver/scripts/wrappers/delete-email-account-wrapper.sh, \
+    /bin/systemctl reload nginx, \
+    /bin/systemctl restart nginx, \
+    /bin/systemctl reload php*-fpm, \
+    /bin/systemctl restart php*-fpm
+
+# Allow www-data to run webserver scripts without password
+WEBSERVER_USERS ALL=(ALL) NOPASSWD: WEBSERVER_SCRIPTS
+
+# Security settings
+Defaults:www-data !requiretty
+Defaults:www-data env_keep += "HOME"
